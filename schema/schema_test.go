@@ -133,7 +133,7 @@ func TestLiveSchemaLifecycle(t *testing.T) {
 	must(s.CreateTable(ctx, "sl_users", users))
 	must(s.CreateTable(ctx, "sl_posts", func(t *schema.Table) {
 		t.BigIncrements("id")
-		t.Integer("user_id").NotNull()
+		t.Integer("user_id").Unsigned().NotNull() // must match the referenced Increments() type on MySQL
 		t.String("title")
 		t.Foreign("user_id").References("sl_users", "id").OnDelete("cascade")
 		t.Index("title")
