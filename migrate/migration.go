@@ -29,6 +29,8 @@ type Migration struct {
 	DisableTransaction bool
 	// Checksum is optional; when set, edits to an applied migration are detected.
 	Checksum string
+	// Connection pins the migration to a named connection; "" means the default one.
+	Connection string
 }
 
 // FromFS loads "<name>.up.sql" / "<name>.down.sql" pairs from dir in fsys.

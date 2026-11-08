@@ -106,6 +106,33 @@ func (c *Column) Unique() *Column { c.t.Unique(c.name); return c }
 // Index adds an index on this column.
 func (c *Column) Index() *Column { c.t.Index(c.name); return c }
 
+// References adds a foreign key from this column to table(column) and returns it for
+// chaining: t.Integer("user_id").Unsigned().References("users", "id").OnDelete("CASCADE").
+func (c *Column) References(table, column string) *Foreign {
+	return c.t.Foreign(c.name).References(table, column)
+}
+
+// Constrained adds a foreign key to table(id). With no argument the table is inferred from the
+// column name (user_id -> users), like Laravel. It returns the Foreign for .OnDelete()/.OnUpdate().
+func (c *Column) Constrained(table ...string) *Foreign {
+	target := inferTable(c.name)
+	if len(table) > 0 {
+		target = table[0]
+	}
+	return c.References(target, "id")
+}
+
+func inferTable(column string) string {
+	base := strings.TrimSuffix(column, "_id")
+	if strings.HasSuffix(base, "y") && !strings.HasSuffix(base, "ey") {
+		return base[:len(base)-1] + "ies"
+	}
+	if strings.HasSuffix(base, "s") {
+		return base + "es"
+	}
+	return base + "s"
+}
+
 func (t *Table) add(name string, spec dialect.Column) *Column {
 	c := &Column{t: t, name: name, spec: spec}
 	t.columns = append(t.columns, c)
@@ -187,6 +214,28 @@ func (t *Table) Enum(name string, values ...string) *Column {
 		}
 	}
 	return t.add(name, dialect.Column{Kind: dialect.KindEnum, Enum: values, Length: longest})
+}
+
+// ForeignID adds an unsigned, NOT NULL bigint meant to reference a BigIncrements key
+// (Laravel's foreignId). Chain .Constrained() to add the foreign key or .Nullable() to allow NULL.
+func (t *Table) ForeignID(name string) *Column {
+	return t.BigInteger(name).Unsigned().NotNull()
+}
+
+// Morphs adds <name>_type and <name>_id (NOT NULL) plus a composite index, for polymorphic relations.
+func (t *Table) Morphs(name string) { t.morphs(name, true) }
+
+// NullableMorphs is Morphs with nullable columns.
+func (t *Table) NullableMorphs(name string) { t.morphs(name, false) }
+
+func (t *Table) morphs(name string, notNull bool) {
+	typ := t.String(name + "_type")
+	id := t.BigInteger(name + "_id").Unsigned()
+	if notNull {
+		typ.NotNull()
+		id.NotNull()
+	}
+	t.Index(name+"_type", name+"_id")
 }
 
 // Timestamps adds nullable created_at and updated_at.

@@ -1,3 +1,4 @@
 /bin/
 *.db
 .DS_Store
+_migro_run_*/

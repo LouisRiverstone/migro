@@ -238,3 +238,35 @@ func TestFakerBasics(t *testing.T) {
 		t.Fatal(s)
 	}
 }
+
+type regSeeder struct{}
+
+func (regSeeder) Run(ctx context.Context, db *migro.DB) error {
+	return db.Gorm.Create(&Author{Name: "from-class"}).Error
+}
+
+type prodOnly struct{ regSeeder }
+
+func (prodOnly) Environments() []string { return []string{"production"} }
+
+func TestRegisterClasses(t *testing.T) {
+	ctx := context.Background()
+	db := setup(t)
+	seed.ResetRegistry()
+	t.Cleanup(seed.ResetRegistry)
+	seed.Register(&regSeeder{})
+	seed.Register(prodOnly{})
+
+	got := seed.Registered()
+	if len(got) != 2 || got[0].Name != "prodOnly" || got[1].Name != "regSeeder" {
+		t.Fatalf("names come from the type: %+v", got)
+	}
+	r := seed.NewRunner(db, seed.WithEnvironment("development"))
+	if err := r.AddRegistered(); err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(ctx)
+	if err != nil || len(res.Ran) != 1 || res.Ran[0] != "regSeeder" || len(res.Skipped) != 1 {
+		t.Fatalf("%+v %v", res, err)
+	}
+}

@@ -1,16 +1,18 @@
 # migro
 
+**Full guide: [docs/usage.md](docs/usage.md)**
+
 A Go toolkit inspired by [AdonisJS Lucid](https://github.com/adonisjs/lucid) and [Knex](https://github.com/knex/knex), built on [GORM](https://gorm.io):
 
 - **`schema`** – Knex-style DDL builder, compiled per dialect
 - **`query`** – Knex-style fluent query builder for tables without a model
 - **`orm`** – Lucid-style generic models: `Find`, `Query().Where().Preload().Paginate()`, soft deletes, `FirstOrCreate`
-- **`migrate`** – batch-based migrations with a lock table, checksums, Go or `.sql` file sources
+- **`migrate`** – Laravel-style migration files (`20260101120000_create_users_table.go` with `Up`/`Down`), batches, lock table, `--pretend`
 - **`events`** – Lucid-style event bus with model lifecycle events
 - **`seed`** – Lucid-style factories (states, relations, faker) and seeders
 - **`cluster`** – application-level sharding across databases
 - **`migrate/diff`** – generate migration files from GORM models
-- **`cmd/migro`** – CLI for SQL-file migrations and seeds
+- **`cmd/migro`**, **`console`** – artisan/ace-style CLI: `make:migration`, `migration:run`, `migration:rollback --step=N`, `db:seed`, `make:model -a`, …
 
 ## Databases
 
@@ -68,27 +70,43 @@ err = db.Transaction(ctx, func(tx *migro.DB) error {
 
 ### Migrations
 
+Laravel-style files, Lucid-style classes. `migro make:migration create_users_table` creates
+`database/migrations/20260101120000_create_users_table.go`:
+
 ```go
-m := migrate.New(db)
-m.Add(migrate.Migration{
-    Name: "20260101000000_create_users",
-    Up:   func(ctx context.Context, s *schema.Builder) error { return s.CreateTable(ctx, "users", ...) },
-    Down: func(ctx context.Context, s *schema.Builder) error { return s.DropTable(ctx, "users") },
-})
-res, err := m.Latest(ctx)    // one batch
-res, err = m.Rollback(ctx)   // last batch
+func init() { migrate.Register(&CreateUsersTable{}) }
+
+type CreateUsersTable struct{}
+
+func (CreateUsersTable) Up(ctx context.Context, s *schema.Builder) error {
+    return s.CreateTable(ctx, "users", func(t *schema.Table) {
+        t.BigIncrements("id")
+        t.String("email").NotNull().Unique()
+        t.ForeignID("team_id").Constrained().OnDelete("CASCADE")
+        t.Timestamps()
+    })
+}
+
+func (CreateUsersTable) Down(ctx context.Context, s *schema.Builder) error {
+    return s.DropTableIfExists(ctx, "users")
+}
 ```
 
-SQL files (`<name>.up.sql` / `<name>.down.sql`) load with `migrate.FromFS(fsys, dir)` (works with `embed.FS`) or the CLI:
+Then, from your project, with the app running or not:
 
 ```
-migro -dialect postgres -dsn "$DSN" make create_users
-migro -dialect postgres -dsn "$DSN" up | rollback | reset | status | unlock
+migro migration:run                    # alias: migrate        (--step, --pretend)
+migro migration:rollback --step=2      # or --batch=N          (--pretend)
+migro migration:status
+migro migration:refresh --seed         # also: reset, fresh, install, unlock
+migro make:model Post -a               # model + migration + factory + seeder
+migro db:seed --class=UserSeeder
+migro migration:diff                   # migration generated from your models
 ```
 
-- Migrations run in a transaction when the dialect supports transactional DDL; on MySQL, Oracle and CockroachDB a failed migration can leave partial changes.
-- A lock row prevents concurrent runners (`MIGRATION_LOCKED`); `Unlock` clears a stale lock.
-- SQL-file migrations record a SHA-256 checksum; editing an applied migration returns `MIGRATION_CHECKSUM_MISMATCH`.
+Set `MIGRO_DIALECT` and `MIGRO_DSN` in the environment or a `.env` file. See the [guide](docs/usage.md#command-line-artisan--ace-style) for every command, `--database=` for several connections, and the production safety prompt.
+
+Migrations also run from code (`migrate.New(db).AddRegistered()`, `Latest`, `Rollback`, …) and SQL files still load with `migrate.FromFS`.
 
 ## Connection pool (Knex-style)
 
@@ -182,13 +200,13 @@ r.Add(seed.Seeder{Name: "001_users", Run: func(ctx context.Context, db *migro.DB
 r.Run(ctx)
 ```
 
-A seeder with no `Environments` runs everywhere except `production`; list `"production"` explicitly to seed it. SQL files work too: `migro seed` (`-seeds dir`, `-once`, `-env`) and `migro seed:make name`.
+A seeder with no `Environments` runs everywhere except `production`; list `"production"` explicitly to seed it. Seeders are Go types registered with `seed.Register`; use `migro make:seeder`, `migro db:seed`.
 
 ## Schema diff (models → migration files)
 
 ```go
 plan, _ := diff.Generate(ctx, db, diff.Options{Renames: map[string]string{"users.name": "full_name"}}, &User{}, &Post{})
-paths, _ := plan.WriteFiles("migrations", "sync_models") // .up.sql + .down.sql, ready for migrate.FromFS
+path, _ := plan.WriteGoFile("database/migrations", "migrations", "sync_models", time.Now()) // a Go migration (or plan.WriteFiles for .sql)
 // plan.Warnings: NOT NULL columns without defaults, skipped default expressions, unmapped types
 // plan.Blocked:  drops that were NOT written; pass AllowDestructive: true to include them
 ```
@@ -197,7 +215,7 @@ It detects new tables, added/removed/renamed columns and indexes. It does not de
 
 ## Errors
 
-All failures are `*migro.Error` with a stable `Code` (`NOT_FOUND`, `QUERY_FAILED`, `MIGRATION_LOCKED`, `MIGRATION_FAILED`, `MIGRATION_CHECKSUM_MISMATCH`, `INVALID_SCHEMA`, `UNSUPPORTED_FEATURE`, `UNSUPPORTED_DIALECT`, `CONNECTION_FAILED`, `INVALID_CONFIG`, `POOL_ACQUIRE_TIMEOUT`, `EVENT_ABORTED`, `EVENT_HANDLER_FAILED`, `SEED_FAILED`, `DIFF_FAILED`, `SHARD_NOT_FOUND`, `SHARD_FAILED`, `UNKNOWN_MORPH_TYPE`). Use `errors.Is(err, migro.ErrNotFound)` or `migro.CodeOf(err)`.
+All failures are `*migro.Error` with a stable `Code` (`NOT_FOUND`, `QUERY_FAILED`, `MIGRATION_LOCKED`, `MIGRATION_FAILED`, `MIGRATION_CHECKSUM_MISMATCH`, `INVALID_SCHEMA`, `UNSUPPORTED_FEATURE`, `UNSUPPORTED_DIALECT`, `CONNECTION_FAILED`, `INVALID_CONFIG`, `POOL_ACQUIRE_TIMEOUT`, `EVENT_ABORTED`, `EVENT_HANDLER_FAILED`, `SEED_FAILED`, `DIFF_FAILED`, `SHARD_NOT_FOUND`, `SHARD_FAILED`, `UNKNOWN_MORPH_TYPE`, `PRODUCTION_BLOCKED`). Use `errors.Is(err, migro.ErrNotFound)` or `migro.CodeOf(err)`.
 
 ## Safety
 

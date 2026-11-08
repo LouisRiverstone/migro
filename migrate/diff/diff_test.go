@@ -3,15 +3,18 @@ package diff_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/LouisRiverstone/migro"
 	"github.com/LouisRiverstone/migro/internal/testdb"
 	"github.com/LouisRiverstone/migro/migrate"
 	"github.com/LouisRiverstone/migro/migrate/diff"
 	"github.com/LouisRiverstone/migro/orm"
+	"github.com/LouisRiverstone/migro/schema"
 )
 
 type Account struct {
@@ -158,5 +161,113 @@ func TestEmptyPlanWritesNothing(t *testing.T) {
 	}
 	if _, _, err := (diff.Plan{Ops: []diff.Op{{Kind: diff.CreateTable}}}).Render(); migro.CodeOf(err) != migro.DiffFailed {
 		t.Fatalf("render without dialect: %v", err)
+	}
+}
+
+func TestGoSourceCompilesAndRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	db := testdb.Open(t)
+	plan, err := diff.Generate(ctx, db, diff.Options{}, &Account{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := plan.GoSource("migrations", "SyncModels")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"func init() { migrate.Register(&SyncModels{}) }", `s.CreateTable(ctx, "accounts"`, `t.String("email", 120).NotNull()`,
+		`t.Unique("email").Named("ux_accounts_email")`, `s.DropTableIfExists(ctx, "accounts")`, "BigIncrements"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("missing %q in:\n%s", want, src)
+		}
+	}
+	if _, err := (diff.Plan{}).WriteGoFile(t.TempDir(), "migrations", "x", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if diff.TypeName("create_users_table") != "CreateUsersTable" {
+		t.Fatal("TypeName")
+	}
+}
+
+// TestGeneratedFileBuilds drops a generated migration into a throwaway package inside this module and compiles it.
+func TestGeneratedFileBuilds(t *testing.T) {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go toolchain not on PATH")
+	}
+	ctx := context.Background()
+	db := testdb.Open(t)
+	plan, _ := diff.Generate(ctx, db, diff.Options{}, &Account{})
+	dir, err := os.MkdirTemp("testdata", "gen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path, err := plan.WriteGoFile(dir, "migrations", "sync_models", time.Now())
+	if err != nil || path == "" {
+		t.Fatal(path, err)
+	}
+	cmd := exec.Command(goBin, "vet", "./"+dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		src, _ := os.ReadFile(path)
+		t.Fatalf("generated migration does not compile: %v\n%s\n%s", err, out, src)
+	}
+}
+
+type Member struct {
+	ID    uint   `gorm:"primaryKey"`
+	Email string `gorm:"size:120;uniqueIndex"`
+}
+
+// A UNIQUE constraint created by the schema builder satisfies a model's uniqueIndex even though the
+// names differ and some drivers do not list constraint-backed indexes.
+func TestUniqueConstraintSatisfiesModelUniqueIndex(t *testing.T) {
+	ctx := context.Background()
+	db := testdb.Open(t)
+	err := schema.New(db).CreateTable(ctx, "members", func(t *schema.Table) {
+		t.Increments("id")
+		t.String("email", 120).Unique()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := diff.Generate(ctx, db, diff.Options{}, &Member{})
+	if err != nil || !plan.Empty() {
+		t.Fatalf("expected no changes, got %+v (%v)", plan.Ops, err)
+	}
+}
+
+type slim struct {
+	ID uint `gorm:"primaryKey"`
+}
+
+func (slim) TableName() string { return "wide" }
+
+// Dropping an indexed column must drop the index first, or SQLite and others reject the statement.
+func TestDropsIndexBeforeColumn(t *testing.T) {
+	ctx := context.Background()
+	db := testdb.Open(t)
+	err := schema.New(db).CreateTable(ctx, "wide", func(t *schema.Table) {
+		t.Increments("id")
+		t.String("tag").Index()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := diff.Generate(ctx, db, diff.Options{AllowDestructive: true}, &slim{})
+	if err != nil || len(plan.Ops) != 2 {
+		t.Fatalf("%+v %v", plan.Ops, err)
+	}
+	if plan.Ops[0].Kind != diff.DropIndex || plan.Ops[1].Kind != diff.DropColumn {
+		t.Fatalf("wrong order: %s then %s", plan.Ops[0].Kind, plan.Ops[1].Kind)
+	}
+	up, _, err := plan.Render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range up {
+		if err := db.Gorm.Exec(s).Error; err != nil {
+			t.Fatalf("applying %q: %v", s, err)
+		}
 	}
 }

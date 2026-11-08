@@ -27,6 +27,7 @@ const (
 	ShardNotFound      Code = "SHARD_NOT_FOUND"
 	ShardFailed        Code = "SHARD_FAILED"
 	UnknownMorphType   Code = "UNKNOWN_MORPH_TYPE"
+	ProductionBlocked  Code = "PRODUCTION_BLOCKED"
 )
 
 // Error is the single error type returned across migro boundaries.

@@ -155,3 +155,41 @@ func TestLiveSchemaLifecycle(t *testing.T) {
 		t.Fatal("sl_users should be gone")
 	}
 }
+
+func TestRelationHelpers(t *testing.T) {
+	d, _ := dialect.Get("mysql")
+	stmts, err := schema.CreateSQL(d, "comments", func(t *schema.Table) {
+		t.BigIncrements("id")
+		t.ForeignID("user_id").Constrained().OnDelete("cascade")
+		t.ForeignID("post_id").Nullable().Constrained("articles").OnDelete("set null")
+		t.Integer("author_id").Unsigned().References("authors", "id")
+		t.Morphs("commentable")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := strings.Join(stmts, "\n")
+	for _, want := range []string{
+		"`user_id` bigint unsigned NOT NULL",
+		"`post_id` bigint unsigned",
+		"FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE",
+		"FOREIGN KEY (`post_id`) REFERENCES `articles` (`id`) ON DELETE SET NULL",
+		"FOREIGN KEY (`author_id`) REFERENCES `authors` (`id`)",
+		"`commentable_type` varchar(255) NOT NULL",
+		"CREATE INDEX `comments_commentable_type_commentable_id_index` ON `comments` (`commentable_type`, `commentable_id`)",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("missing %q in:\n%s", want, sql)
+		}
+	}
+	if strings.Contains(sql, "`post_id` bigint unsigned NOT NULL") {
+		t.Error("Nullable() must override ForeignID's NOT NULL")
+	}
+	cases := map[string]string{"user_id": "users", "category_id": "categories", "address_id": "addresses", "key_id": "keys"}
+	for col, want := range cases {
+		s, _ := schema.CreateSQL(d, "t", func(t *schema.Table) { t.ForeignID(col).Constrained() })
+		if !strings.Contains(strings.Join(s, ""), "REFERENCES `"+want+"`") {
+			t.Errorf("%s should infer %s: %v", col, want, s)
+		}
+	}
+}

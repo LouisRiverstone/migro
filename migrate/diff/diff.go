@@ -111,11 +111,20 @@ func Generate(ctx context.Context, db *migro.DB, opts Options, models ...any) (P
 			plan.Ops = append(plan.Ops, Op{Kind: CreateTable, Table: sch.Table, Def: &def})
 			continue
 		}
+		start := len(plan.Ops)
 		if err := diffExisting(m, &plan, def, opts); err != nil {
 			return Plan{}, err
 		}
+		orderTableOps(plan.Ops[start:])
 	}
 	return plan, nil
+}
+
+// orderTableOps puts a table's operations in an order every database accepts: columns appear before
+// the indexes that use them, and indexes are dropped before the columns they cover.
+func orderTableOps(ops []Op) {
+	rank := map[OpKind]int{AddColumn: 0, RenameColumn: 1, DropIndex: 2, DropColumn: 3, AddIndex: 4}
+	sort.SliceStable(ops, func(i, j int) bool { return rank[ops[i].Kind] < rank[ops[j].Kind] })
 }
 
 func diffExisting(m gorm.Migrator, plan *Plan, def TableDef, opts Options) error {
@@ -174,7 +183,7 @@ func diffExisting(m gorm.Migrator, plan *Plan, def TableDef, opts Options) error
 		plan.Blocked = append(plan.Blocked, op)
 	}
 
-	return diffIndexes(m, plan, def, opts)
+	return diffIndexes(m, plan, def, opts, live)
 }
 
 func renameSource(table, newName string, renames map[string]string, live map[string]gorm.ColumnType, want map[string]ColumnDef) string {
@@ -195,7 +204,7 @@ func renameSource(table, newName string, renames map[string]string, live map[str
 	return ""
 }
 
-func diffIndexes(m gorm.Migrator, plan *Plan, def TableDef, opts Options) error {
+func diffIndexes(m gorm.Migrator, plan *Plan, def TableDef, opts Options, live map[string]gorm.ColumnType) error {
 	idx, err := m.GetIndexes(def.Name)
 	if err != nil {
 		plan.Warnings = append(plan.Warnings, fmt.Sprintf("%s: could not introspect indexes (%v); index diff skipped", def.Name, err))
@@ -216,7 +225,7 @@ func diffIndexes(m gorm.Migrator, plan *Plan, def TableDef, opts Options) error 
 		k := sig(want.Columns, want.Unique)
 		wantSigs[k] = true
 		// Constraint-backed uniques may be invisible to GetIndexes; fall back to name lookups.
-		if have[k] || m.HasConstraint(def.Name, want.Name) || m.HasIndex(def.Name, want.Name) {
+		if have[k] || m.HasConstraint(def.Name, want.Name) || m.HasIndex(def.Name, want.Name) || uniqueColumn(live, want) {
 			continue
 		}
 		w := want
@@ -239,6 +248,20 @@ func diffIndexes(m gorm.Migrator, plan *Plan, def TableDef, opts Options) error 
 		plan.Blocked = append(plan.Blocked, op)
 	}
 	return nil
+}
+
+// uniqueColumn reports whether a single-column unique index is already enforced by the column itself
+// (a UNIQUE constraint, which several drivers do not list as an index).
+func uniqueColumn(live map[string]gorm.ColumnType, want IndexDef) bool {
+	if !want.Unique || len(want.Columns) != 1 {
+		return false
+	}
+	col, ok := live[want.Columns[0]]
+	if !ok {
+		return false
+	}
+	unique, known := col.Unique()
+	return known && unique
 }
 
 // systemIndex hides primary keys and constraint-backed indexes GORM creates implicitly.

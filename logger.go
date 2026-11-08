@@ -1,5 +1,13 @@
 package migro
 
-import "gorm.io/gorm/logger"
+import (
+	"io"
+	"log"
 
-func silentLogger() logger.Interface { return logger.Default.LogMode(logger.Silent) }
+	"gorm.io/gorm/logger"
+)
+
+// silentLogger discards everything, even for drivers that force Debug() on internal queries.
+func silentLogger() logger.Interface {
+	return logger.New(log.New(io.Discard, "", 0), logger.Config{LogLevel: logger.Silent})
+}
