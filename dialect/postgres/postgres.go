@@ -36,6 +36,27 @@ func (d *pgDialect) Dialector(dsn string) gorm.Dialector {
 	return postgres.New(postgres.Config{DSN: dsn, PreferSimpleProtocol: d.v == redshift})
 }
 
+func (d *pgDialect) DriverName() string { return "pgx" }
+
+func (d *pgDialect) FromConn(conn gorm.ConnPool) gorm.Dialector {
+	return postgres.New(postgres.Config{Conn: conn, PreferSimpleProtocol: d.v == redshift})
+}
+
+// DriverDSN makes pgx use the simple protocol on Redshift, which lacks extended-protocol support.
+func (d *pgDialect) DriverDSN(dsn string) string {
+	if d.v != redshift {
+		return dsn
+	}
+	if strings.Contains(dsn, "://") {
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			sep = "&"
+		}
+		return dsn + sep + "default_query_exec_mode=simple_protocol"
+	}
+	return dsn + " default_query_exec_mode=simple_protocol"
+}
+
 func (d *pgDialect) Quote(i string) string { return dialect.QuoteWith(i, `"`, `"`, false) }
 
 func (d *pgDialect) ColumnType(c dialect.Column) string {

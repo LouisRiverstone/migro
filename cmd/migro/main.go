@@ -1,6 +1,6 @@
 // Command migro manages SQL file migrations.
 //
-//	migro [-dialect d] [-dsn s] [-dir migrations] make|up|rollback|reset|status|unlock [name]
+//	migro [flags] make|up|rollback|reset|status|unlock|seed|seed:make [name]
 //
 // MIGRO_DIALECT and MIGRO_DSN are used when the flags are omitted.
 package main
@@ -21,6 +21,7 @@ import (
 	_ "github.com/LouisRiverstone/migro/dialect/sqlite"
 	_ "github.com/LouisRiverstone/migro/dialect/sqlserver"
 	"github.com/LouisRiverstone/migro/migrate"
+	"github.com/LouisRiverstone/migro/seed"
 )
 
 func main() {
@@ -35,15 +36,21 @@ func run(args []string) error {
 	dia := fs.String("dialect", os.Getenv("MIGRO_DIALECT"), "database dialect")
 	dsn := fs.String("dsn", os.Getenv("MIGRO_DSN"), "connection string")
 	dir := fs.String("dir", "migrations", "migrations directory")
+	seeds := fs.String("seeds", "seeds", "seeds directory (*.sql)")
+	env := fs.String("env", "", "seed environment (default MIGRO_ENV, APP_ENV, development)")
+	once := fs.Bool("once", false, "seed: skip seeders that already ran")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() == 0 {
-		return fmt.Errorf("command required: make, up, rollback, reset, status, unlock")
+		return fmt.Errorf("command required: make, up, rollback, reset, status, unlock, seed, seed:make")
 	}
 	cmd := fs.Arg(0)
-	if cmd == "make" {
-		return makeFiles(*dir, fs.Arg(1))
+	switch cmd {
+	case "make":
+		return makeFiles(*dir, fs.Arg(1), []string{".up.sql", ".down.sql"})
+	case "seed:make":
+		return makeFiles(*seeds, fs.Arg(1), []string{".sql"})
 	}
 
 	db, err := migro.Open(migro.Config{Dialect: *dia, DSN: *dsn})
@@ -51,6 +58,9 @@ func run(args []string) error {
 		return err
 	}
 	defer db.Close()
+	if cmd == "seed" {
+		return runSeeds(db, *seeds, *env, *once, fs.Args()[1:])
+	}
 	m := migrate.New(db)
 	ms, err := migrate.FromFS(os.DirFS(*dir), ".")
 	if err != nil {
@@ -103,7 +113,38 @@ func report(verb string, res migrate.Result, err error) error {
 	return nil
 }
 
-func makeFiles(dir, name string) error {
+func runSeeds(db *migro.DB, dir, env string, once bool, only []string) error {
+	ss, err := seed.FromFS(os.DirFS(dir), ".")
+	if err != nil {
+		return err
+	}
+	opts := []seed.Option{}
+	if env != "" {
+		opts = append(opts, seed.WithEnvironment(env))
+	}
+	if once {
+		opts = append(opts, seed.Once())
+	}
+	r := seed.NewRunner(db, opts...)
+	if err := r.Add(ss...); err != nil {
+		return err
+	}
+	var res seed.Result
+	if len(only) > 0 {
+		res, err = r.RunOnly(context.Background(), only...)
+	} else {
+		res, err = r.Run(context.Background())
+	}
+	for _, n := range res.Ran {
+		fmt.Println("seeded", n)
+	}
+	for _, n := range res.Skipped {
+		fmt.Println("skipped", n)
+	}
+	return err
+}
+
+func makeFiles(dir, name string, suffixes []string) error {
 	name = strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' {
 			return r
@@ -111,13 +152,13 @@ func makeFiles(dir, name string) error {
 		return '_'
 	}, name)
 	if name == "" {
-		return fmt.Errorf("usage: migro make <name>")
+		return fmt.Errorf("usage: migro make|seed:make <name>")
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	base := time.Now().UTC().Format("20060102150405") + "_" + name
-	for _, suffix := range []string{".up.sql", ".down.sql"} {
+	for _, suffix := range suffixes {
 		p := filepath.Join(dir, base+suffix)
 		if err := os.WriteFile(p, nil, 0o644); err != nil {
 			return err

@@ -15,7 +15,11 @@ func init() { dialect.Register(&liteDialect{}, "sqlite3") }
 
 func (d *liteDialect) Name() string                        { return "sqlite" }
 func (d *liteDialect) Dialector(dsn string) gorm.Dialector { return sqlite.Open(dsn) }
-func (d *liteDialect) Quote(i string) string               { return dialect.QuoteWith(i, `"`, `"`, false) }
+func (d *liteDialect) DriverName() string                  { return "sqlite" }
+func (d *liteDialect) FromConn(conn gorm.ConnPool) gorm.Dialector {
+	return &sqlite.Dialector{Conn: conn}
+}
+func (d *liteDialect) Quote(i string) string { return dialect.QuoteWith(i, `"`, `"`, false) }
 
 func (d *liteDialect) ColumnType(c dialect.Column) string {
 	switch c.Kind {

@@ -19,7 +19,11 @@ func init() { dialect.Register(&oraDialect{}, "oracledb") }
 
 func (d *oraDialect) Name() string                        { return "oracle" }
 func (d *oraDialect) Dialector(dsn string) gorm.Dialector { return oracle.Open(dsn) }
-func (d *oraDialect) Quote(i string) string               { return dialect.QuoteWith(i, `"`, `"`, true) }
+func (d *oraDialect) DriverName() string                  { return "oracle" }
+func (d *oraDialect) FromConn(conn gorm.ConnPool) gorm.Dialector {
+	return oracle.New(oracle.Config{Conn: conn})
+}
+func (d *oraDialect) Quote(i string) string { return dialect.QuoteWith(i, `"`, `"`, true) }
 
 func (d *oraDialect) ColumnType(c dialect.Column) string {
 	switch c.Kind {

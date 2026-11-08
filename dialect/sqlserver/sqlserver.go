@@ -15,7 +15,11 @@ func init() { dialect.Register(&msDialect{}, "mssql") }
 
 func (d *msDialect) Name() string                        { return "sqlserver" }
 func (d *msDialect) Dialector(dsn string) gorm.Dialector { return sqlserver.Open(dsn) }
-func (d *msDialect) Quote(i string) string               { return dialect.QuoteWith(i, "[", "]", false) }
+func (d *msDialect) DriverName() string                  { return "sqlserver" }
+func (d *msDialect) FromConn(conn gorm.ConnPool) gorm.Dialector {
+	return sqlserver.New(sqlserver.Config{Conn: conn})
+}
+func (d *msDialect) Quote(i string) string { return dialect.QuoteWith(i, "[", "]", false) }
 
 func (d *msDialect) ColumnType(c dialect.Column) string {
 	switch c.Kind {

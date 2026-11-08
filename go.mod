@@ -9,6 +9,7 @@ require (
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/driver/sqlserver v1.6.4
 	gorm.io/gorm v1.31.2
+	gorm.io/plugin/dbresolver v1.6.2
 )
 
 require (

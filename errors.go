@@ -18,6 +18,15 @@ const (
 	InvalidSchema      Code = "INVALID_SCHEMA"
 	UnsupportedFeature Code = "UNSUPPORTED_FEATURE"
 	QueryFailed        Code = "QUERY_FAILED"
+	InvalidConfig      Code = "INVALID_CONFIG"
+	PoolAcquireTimeout Code = "POOL_ACQUIRE_TIMEOUT"
+	EventAborted       Code = "EVENT_ABORTED"
+	EventHandlerFailed Code = "EVENT_HANDLER_FAILED"
+	SeedFailed         Code = "SEED_FAILED"
+	DiffFailed         Code = "DIFF_FAILED"
+	ShardNotFound      Code = "SHARD_NOT_FOUND"
+	ShardFailed        Code = "SHARD_FAILED"
+	UnknownMorphType   Code = "UNKNOWN_MORPH_TYPE"
 )
 
 // Error is the single error type returned across migro boundaries.
@@ -49,6 +58,8 @@ var (
 	ErrNotFound           = &Error{Code: NotFound, Message: "record not found"}
 	ErrMigrationLocked    = &Error{Code: MigrationLocked}
 	ErrUnsupportedFeature = &Error{Code: UnsupportedFeature}
+	ErrPoolAcquireTimeout = &Error{Code: PoolAcquireTimeout}
+	ErrEventAborted       = &Error{Code: EventAborted}
 )
 
 // Wrap builds an *Error around a cause.

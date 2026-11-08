@@ -24,6 +24,10 @@ func (d *myDialect) Name() string { return d.name }
 func (d *myDialect) Dialector(dsn string) gorm.Dialector {
 	return mysql.Open(dsn)
 }
+func (d *myDialect) DriverName() string { return "mysql" }
+func (d *myDialect) FromConn(conn gorm.ConnPool) gorm.Dialector {
+	return mysql.New(mysql.Config{Conn: conn})
+}
 func (d *myDialect) Quote(i string) string { return dialect.QuoteWith(i, "`", "`", false) }
 
 func (d *myDialect) ColumnType(c dialect.Column) string {

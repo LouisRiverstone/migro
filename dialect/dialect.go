@@ -48,6 +48,12 @@ type Column struct {
 type Dialect interface {
 	Name() string
 	Dialector(dsn string) gorm.Dialector
+	// DriverName is the database/sql driver name; DriverDSN adapts the DSN for it.
+	// FromConn builds a Dialector on top of an existing pool (used for AfterCreate hooks,
+	// acquire timeouts and replicas).
+	DriverName() string
+	DriverDSN(dsn string) string
+	FromConn(conn gorm.ConnPool) gorm.Dialector
 	Quote(ident string) string
 	ColumnType(c Column) string
 	// AutoIncrement returns the full column definition (after the column name) for an auto-increment primary key.
@@ -115,7 +121,8 @@ func QuoteWith(ident, open, closing string, upper bool) string {
 // Base provides ANSI defaults; dialects embed it and override what differs.
 type Base struct{}
 
-func (Base) AddColumnKeyword() string { return "ADD COLUMN" }
+func (Base) DriverDSN(dsn string) string { return dsn }
+func (Base) AddColumnKeyword() string    { return "ADD COLUMN" }
 func (Base) BoolLiteral(b bool) string {
 	if b {
 		return "1"
