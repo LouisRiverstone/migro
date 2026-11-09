@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"reflect"
+	"strconv"
 
 	"github.com/LouisRiverstone/migro"
 	"gorm.io/gorm"
@@ -75,13 +76,26 @@ func (q *Query[T]) aggregate(ctx context.Context, expr string) (float64, error) 
 	if err != nil {
 		return 0, err
 	}
+	return asFloat(v), nil
+}
+
+// asFloat reads what drivers return for numeric aggregates: float64, int64, or decimal text.
+func asFloat(v any) float64 {
 	switch x := v.(type) {
 	case float64:
-		return x, nil
+		return x
+	case float32:
+		return float64(x)
+	case string:
+		f, _ := strconv.ParseFloat(x, 64)
+		return f
+	case []byte:
+		f, _ := strconv.ParseFloat(string(x), 64)
+		return f
 	case nil:
-		return 0, nil
+		return 0
 	}
-	return float64(asInt(v)), nil
+	return float64(asInt(v))
 }
 
 func (q *Query[T]) scalar(ctx context.Context, expr string) (any, error) {

@@ -15,7 +15,7 @@ func (CreateCategoriesTable) Up(ctx context.Context, s *schema.Builder) error {
 	return s.CreateTable(ctx, "categories", func(t *schema.Table) {
 		// self-referencing tree
 		t.Increments("id")
-		t.Integer("parent_id").Nullable()
+		t.Integer("parent_id").Unsigned().Nullable()
 		t.String("name").NotNull()
 		t.Foreign("parent_id").References("categories", "id").OnDelete("CASCADE").Named("categories_parent_fk")
 		t.Timestamps()

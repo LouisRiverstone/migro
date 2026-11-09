@@ -2,6 +2,7 @@ package orm_test
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -403,6 +404,9 @@ func asNum(v any) float64 {
 		return float64(x)
 	case float64:
 		return x
+	case string:
+		f, _ := strconv.ParseFloat(x, 64)
+		return f
 	}
 	return -1
 }

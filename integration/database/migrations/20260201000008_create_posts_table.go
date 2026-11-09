@@ -14,8 +14,8 @@ func init() { migrate.Register(&CreatePostsTable{}) }
 func (CreatePostsTable) Up(ctx context.Context, s *schema.Builder) error {
 	return s.CreateTable(ctx, "posts", func(t *schema.Table) {
 		t.Increments("id")
-		t.Integer("user_id").NotNull().Constrained("users").OnDelete("CASCADE")
-		t.Integer("category_id").Nullable().Constrained("categories").OnDelete("SET NULL")
+		t.Integer("user_id").Unsigned().NotNull().Constrained("users").OnDelete("CASCADE")
+		t.Integer("category_id").Unsigned().Nullable().Constrained("categories").OnDelete("SET NULL")
 		t.String("slug").NotNull().Unique()
 		t.String("title").NotNull()
 		t.Boolean("published").NotNull().Default(false)

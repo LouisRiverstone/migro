@@ -14,7 +14,7 @@ func init() { migrate.Register(&CreateUsersTable{}) }
 func (CreateUsersTable) Up(ctx context.Context, s *schema.Builder) error {
 	return s.CreateTable(ctx, "users", func(t *schema.Table) {
 		t.Increments("id")
-		t.Integer("country_id").NotNull().Index().Constrained("countries").OnDelete("RESTRICT")
+		t.Integer("country_id").Unsigned().NotNull().Index().Constrained("countries").OnDelete("RESTRICT")
 		t.String("email", 150).NotNull().Unique()
 		t.String("name", 100).NotNull()
 		t.SoftDeletes()

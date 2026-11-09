@@ -140,7 +140,7 @@ func TestMigrationsBuildTheWholeSchema(t *testing.T) {
 		"users":     {"users_country_id_index", "users_deleted_at_index"},
 		"role_user": {"role_user_role_id_index"},
 		"posts":     {"posts_user_published_idx"},
-		"comments":  {"comments_commentable_type_commentable_id_index", "comments_user_id_index"},
+		"comments":  {"comments_commentable_type_commentable_id_index", "comments_created_at_index"},
 		"taggables": {"taggables_taggable_type_taggable_id_index"},
 		"orders":    {"orders_status_placed_at_index"},
 	} {
@@ -704,7 +704,7 @@ func TestRollbackUnwindsInForeignKeyOrder(t *testing.T) {
 	if ok, _ := schema.New(db).HasColumn(ctx, "users", "phone"); ok {
 		t.Error("users.phone should be dropped")
 	}
-	if db.Gorm.Migrator().HasIndex("comments", "comments_user_id_index") {
+	if db.Gorm.Migrator().HasIndex("comments", "comments_created_at_index") {
 		t.Error("the reporting index should be dropped")
 	}
 	if count(t, db, "users") != 3 {
@@ -790,7 +790,8 @@ func TestMigrationIsAtomicWhenAStatementFails(t *testing.T) {
 	if migro.CodeOf(err) != migro.MigrationFailed {
 		t.Fatalf("want MIGRATION_FAILED, got %v", err)
 	}
-	if db.Gorm.Migrator().HasTable("half_done") {
+	// MySQL commits DDL implicitly, so only dialects with transactional DDL can roll the table back
+	if db.Dialect.TransactionalDDL() && db.Gorm.Migrator().HasTable("half_done") {
 		t.Fatal("transactional DDL should have rolled the table back")
 	}
 	st, _ := m.Status(ctx)

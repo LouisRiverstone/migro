@@ -14,7 +14,7 @@ func init() { migrate.Register(&CreateOrdersTable{}) }
 func (CreateOrdersTable) Up(ctx context.Context, s *schema.Builder) error {
 	return s.CreateTable(ctx, "orders", func(t *schema.Table) {
 		t.Increments("id")
-		t.Integer("user_id").NotNull().Constrained("users").OnDelete("RESTRICT")
+		t.Integer("user_id").Unsigned().NotNull().Constrained("users").OnDelete("RESTRICT")
 		t.String("status", 20).NotNull().Default("pending")
 		t.Decimal("total", 10, 2).NotNull()
 		t.Timestamp("placed_at").Nullable()
