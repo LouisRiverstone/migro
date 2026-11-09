@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  Lucid and Knex ergonomics, Laravel-style migrations, on top of <a href="https://gorm.io">GORM</a>.
+  Eloquent and Lucid models, Knex-style schema builder, Laravel-style migrations and seeders, on top of <a href="https://gorm.io">GORM</a>.
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 
 ---
 
-**migro** adds what GORM leaves out: a schema builder, versioned migrations as Go files, seeders and factories, events, read replicas, sharding, and an artisan/ace-style CLI. Your GORM models and queries keep working unchanged.
+**migro** adds what GORM leaves out: Eloquent/Lucid-style models with typed relations, a schema builder, versioned migrations as Go files, `DatabaseSeeder`-style seeders and factories, events, read replicas, sharding, and an artisan/ace-style CLI. Your GORM models and queries keep working unchanged.
 
 ## Install
 
@@ -51,34 +51,73 @@ func (CreatePostsTable) Up(ctx context.Context, s *schema.Builder) error {
 }
 ```
 
-Query with generic models:
+Declare models with typed relations (tag them `gorm:"-"`; names follow Laravel's conventions):
+
+```go
+type Post struct {
+	orm.BaseModel                                            // ID, CreatedAt, UpdatedAt (SoftDeleteModel adds DeletedAt)
+	UserID uint
+	Title  string
+
+	Author   orm.BelongsTo[User]    `gorm:"-" orm:"foreignKey:user_id"`
+	Comments orm.MorphMany[Comment] `gorm:"-" orm:"morph:commentable"`
+	Tags     orm.MorphToMany[Tag]   `gorm:"-" orm:"morph:taggable"`
+}
+
+func (Post) Fillable() []string { return []string{"user_id", "title"} }   // mass-assignment allow-list
+```
+
+Query, load and write like Eloquent/Lucid:
 
 ```go
 db, _ := migro.Open(migro.Config{Dialect: "postgres", DSN: dsn})
+posts := orm.New[Post](db)
 
-type Post struct {
-	orm.BaseModel
-	UserID uint
-	Title  string
-	Author orm.BelongsTo[User]    `gorm:"-" orm:"foreignKey:user_id"`
-	Tags   orm.MorphToMany[Tag]   `gorm:"-" orm:"morph:taggable"`
+page, _ := posts.Query().
+	Where("title LIKE ?", "%go%").
+	WhereHas("Tags", func(q *gorm.DB) *gorm.DB { return q.Where("name = ?", "orm") }).
+	With("Author").With("Comments.User").WithCount("Tags").   // eager loading, never one query per row
+	Latest().Paginate(ctx, 1, 20)
+
+post, _ := posts.CreateFrom(ctx, map[string]any{"user_id": 1, "title": "Hello"})
+post.Title = "Renamed"
+post.IsDirty("title")                                       // true
+_ = post.Save(ctx)                                          // UPDATE of the changed columns only
+_, _ = post.Comments.Create(ctx, map[string]any{"body": "Nice"})  // fills commentable_type / commentable_id
+_, _ = post.Tags.Sync(ctx, 1, 2)                            // pivot writes: Attach, Detach, Sync, Toggle
+author, _ := post.Author.Get(ctx)                           // lazy load
+```
+
+Seed it the Laravel way, with a `DatabaseSeeder` that calls the others in foreign-key order:
+
+```go
+type DatabaseSeeder struct{}
+
+func init() { seed.Register(&DatabaseSeeder{}) }
+
+func (DatabaseSeeder) Run(ctx context.Context, db *migro.DB) error {
+	return seed.Call(ctx, db, &CountrySeeder{}, &UserSeeder{}, &PostSeeder{})   // one transaction
 }
 
-posts := orm.New[Post](db)
-page, _ := posts.Query().Where("title LIKE ?", "%go%").With("Author").With("Tags").WithCount("Tags").Paginate(ctx, 1, 20)
+// in PostSeeder: factories with states, sequences, relations and parents
+users, _ := UserFactory().Sequence(
+	func(i int, u *User) { u.Role = "admin" },
+	func(i int, u *User) { u.Role = "editor" },
+).For("country").With("posts", 3).CreateMany(ctx, db, 10)
+```
 
-post, _ := posts.Find(ctx, 1)
-post.Title = "Renamed"
-_ = post.Save(ctx)                       // updates only the changed columns
-_ = post.Tags.Sync(ctx, 1, 2)            // Eloquent-style pivot writes
+```
+migro db:seed                       # runs DatabaseSeeder
+migro migration:fresh --seed        # rebuild the database and seed it
 ```
 
 ## What you get
 
 - **Schema builder** and **query builder** in the style of Knex
-- **Models** in the style of Eloquent and Lucid: instance API, dirty tracking, mass assignment, typed relation fields (including `hasManyThrough` and polymorphic ones), eager/lazy loading and pivot writes
+- **Models** in the style of Eloquent and Lucid: instance API (`Save`, `Delete`, `Restore`, `Refresh`), dirty tracking, mass assignment, `Hidden`/`Appends` serialization, aggregates and `Chunk`
+- **Relations** as typed fields: has-one/many, belongs-to, many-to-many with pivot writes, `hasManyThrough`, and the polymorphic family (`MorphTo`, `MorphMany`, `MorphToMany`, ...), with `With`, `WithCount`, `Has`/`WhereHas` and lazy loading
 - **Migrations** like Laravel: timestamped files, batches, locking, `--pretend`, `migration:diff`
-- **Seeders and factories** like Laravel/Lucid: `DatabaseSeeder` with `seed.Call`, states, sequences, relations and a built-in faker
+- **Seeders and factories** like Laravel/Lucid: `DatabaseSeeder` with `seed.Call`, `--class`, `--once`, states, sequences, `For`/`With`, `UpdateOrCreateMany` and a built-in faker
 - **Events**, **connection pool options**, **read replicas** and **sharding**
 
 PostgreSQL, CockroachDB, Redshift, MySQL, MariaDB, SQLite, SQL Server and Oracle. PostgreSQL, MySQL and SQLite run in CI; the others are unit-tested but not yet verified against live servers.
