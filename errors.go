@@ -28,6 +28,9 @@ const (
 	ShardFailed        Code = "SHARD_FAILED"
 	UnknownMorphType   Code = "UNKNOWN_MORPH_TYPE"
 	ProductionBlocked  Code = "PRODUCTION_BLOCKED"
+	MassAssignment     Code = "MASS_ASSIGNMENT"
+	UnboundModel       Code = "UNBOUND_MODEL"
+	RelationNotLoaded  Code = "RELATION_NOT_LOADED"
 )
 
 // Error is the single error type returned across migro boundaries.

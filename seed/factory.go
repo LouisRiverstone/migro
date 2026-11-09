@@ -8,10 +8,15 @@ import (
 	"time"
 
 	"github.com/LouisRiverstone/migro"
+	"github.com/LouisRiverstone/migro/orm"
 )
 
 // RelationFn creates n related rows for a freshly created parent (Lucid's factory.with()).
 type RelationFn[T any] func(ctx context.Context, db *migro.DB, parent *T, n int, f *Faker) error
+
+// ParentFn creates a parent row for a child about to be inserted and points the child at it
+// (Laravel's ->for(User::factory())).
+type ParentFn[T any] func(ctx context.Context, db *migro.DB, child *T, f *Faker) error
 
 type withSpec struct {
 	name string
@@ -25,17 +30,21 @@ type Factory[T any] struct {
 	states    map[string]func(*T)
 	relations map[string]RelationFn[T]
 	after     []func(ctx context.Context, db *migro.DB, m *T) error
+	making    []func(m *T)
+	parents   map[string]ParentFn[T]
 
-	merges  []func(*T)
-	applied []string
-	with    []withSpec
-	seed    int64
-	hasSeed bool
+	merges    []func(*T)
+	sequences []func(i int, m *T)
+	applied   []string
+	with      []withSpec
+	forNames  []string
+	seed      int64
+	hasSeed   bool
 }
 
 // Define creates a factory from a function returning default attribute values.
 func Define[T any](define func(f *Faker) T) *Factory[T] {
-	return &Factory[T]{define: define, states: map[string]func(*T){}, relations: map[string]RelationFn[T]{}}
+	return &Factory[T]{define: define, states: map[string]func(*T){}, relations: map[string]RelationFn[T]{}, parents: map[string]ParentFn[T]{}}
 }
 
 // State registers a named variant (Lucid's .state()). Call during setup.
@@ -58,7 +67,37 @@ func (f *Factory[T]) clone() *Factory[T] {
 	c.merges = slices.Clone(f.merges)
 	c.applied = slices.Clone(f.applied)
 	c.with = slices.Clone(f.with)
+	c.sequences = slices.Clone(f.sequences)
+	c.forNames = slices.Clone(f.forNames)
 	return &c
+}
+
+// AfterMaking registers a hook run after each model is built, by Make and Create alike (Laravel's afterMaking).
+func (f *Factory[T]) AfterMaking(fn func(m *T)) *Factory[T] {
+	f.making = append(f.making, fn)
+	return f
+}
+
+// Parent registers a named belongs-to builder. Call during setup; activate it with For.
+func (f *Factory[T]) Parent(name string, fn ParentFn[T]) *Factory[T] {
+	f.parents[name] = fn
+	return f
+}
+
+// For creates the named parent before each insert and links the child to it (Laravel's for()).
+// It has no effect on Make, which never touches the database.
+func (f *Factory[T]) For(name string) *Factory[T] {
+	c := f.clone()
+	c.forNames = append(c.forNames, name)
+	return c
+}
+
+// Sequence alternates attribute changes across the generated models: model i gets fns[i % len(fns)]
+// (Laravel's sequence()). The index counts from 0 within one Make/Create call.
+func (f *Factory[T]) Sequence(fns ...func(i int, m *T)) *Factory[T] {
+	c := f.clone()
+	c.sequences = append(c.sequences, fns...)
+	return c
 }
 
 // Merge overrides attributes on every generated model (Lucid's .merge()).
@@ -96,7 +135,7 @@ func (f *Factory[T]) faker() *Faker {
 	return NewFaker(time.Now().UnixNano())
 }
 
-func (f *Factory[T]) build(fk *Faker) (T, error) {
+func (f *Factory[T]) build(fk *Faker, i int) (T, error) {
 	m := f.define(fk)
 	for _, name := range f.applied {
 		st, ok := f.states[name]
@@ -105,21 +144,27 @@ func (f *Factory[T]) build(fk *Faker) (T, error) {
 		}
 		st(&m)
 	}
+	if len(f.sequences) > 0 {
+		f.sequences[i%len(f.sequences)](i, &m)
+	}
 	for _, fn := range f.merges {
+		fn(&m)
+	}
+	for _, fn := range f.making {
 		fn(&m)
 	}
 	return m, nil
 }
 
 // Make builds one model without persisting it.
-func (f *Factory[T]) Make() (T, error) { return f.build(f.faker()) }
+func (f *Factory[T]) Make() (T, error) { return f.build(f.faker(), 0) }
 
 // MakeMany builds n models without persisting them.
 func (f *Factory[T]) MakeMany(n int) ([]T, error) {
 	fk := f.faker()
 	out := make([]T, 0, n)
-	for range n {
-		m, err := f.build(fk)
+	for i := range n {
+		m, err := f.build(fk, i)
 		if err != nil {
 			return nil, err
 		}
@@ -146,9 +191,18 @@ func (f *Factory[T]) CreateMany(ctx context.Context, db *migro.DB, n int) ([]T, 
 	models := make([]T, 0, n)
 	err := db.Transaction(ctx, func(tx *migro.DB) error {
 		for i := range n {
-			m, err := f.build(fk)
+			m, err := f.build(fk, i)
 			if err != nil {
 				return err
+			}
+			for _, name := range f.forNames {
+				parent, ok := f.parents[name]
+				if !ok {
+					return migro.Newf(migro.SeedFailed, "unknown factory parent %q", name)
+				}
+				if err := parent(ctx, tx, &m, fk); err != nil {
+					return migro.Wrap(migro.SeedFailed, err, "parent %q", name)
+				}
 			}
 			if err := tx.Gorm.WithContext(ctx).Create(&m).Error; err != nil {
 				return migro.Wrap(migro.SeedFailed, err, "create model %d of %d", i+1, n)
@@ -176,6 +230,9 @@ func (f *Factory[T]) CreateMany(ctx context.Context, db *migro.DB, n int) ([]T, 
 			return nil, err
 		}
 		return nil, migro.Wrap(migro.SeedFailed, err, "%s", fmt.Sprintf("create %d models", n))
+	}
+	for i := range models {
+		orm.Bind(db, &models[i]) // instance methods and relations work on the returned models
 	}
 	return models, nil
 }

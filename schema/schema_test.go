@@ -193,3 +193,34 @@ func TestRelationHelpers(t *testing.T) {
 		}
 	}
 }
+
+// Dropping a column together with the unique constraint / index that covers it must work in one
+// AlterTable on every database: the constraint has to go first.
+func TestAlterDropsConstraintsBeforeColumns(t *testing.T) {
+	ctx := context.Background()
+	db := testdb.Open(t)
+	s := schema.New(db)
+	if err := s.CreateTable(ctx, "al_posts", func(t *schema.Table) { t.Increments("id"); t.String("title") }); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AlterTable(ctx, "al_posts", func(t *schema.Table) {
+		t.String("slug", 160)
+		t.Unique("slug")
+		t.String("tag")
+		t.Index("tag")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := s.AlterTable(ctx, "al_posts", func(t *schema.Table) {
+		t.DropColumn("slug")
+		t.DropColumn("tag")
+		t.DropUnique("al_posts_slug_unique")
+		t.DropIndex("al_posts_tag_index")
+	})
+	if err != nil {
+		t.Fatalf("down of an alter must be reversible in one statement group: %v", err)
+	}
+	if ok, _ := s.HasColumn(ctx, "al_posts", "slug"); ok {
+		t.Fatal("slug should be gone")
+	}
+}

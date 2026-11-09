@@ -1,0 +1,47 @@
+# Documentation site for GitHub Pages (Settings -> Pages -> Deploy from branch -> main /docs).
+title: migro
+description: Models and migrations for Go. Lucid and Knex ergonomics on top of GORM.
+url: https://louisriverstone.github.io
+baseurl: /migro
+
+remote_theme: just-the-docs/just-the-docs@v0.10.0
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+
+# Lets pages link to each other with plain relative .md links that also work when read on GitHub.
+relative_links:
+  enabled: true
+  collections: false
+
+logo: /assets/logo.png
+search_enabled: true
+heading_anchors: true
+color_scheme: light
+
+aux_links:
+  GitHub: https://github.com/LouisRiverstone/migro
+aux_links_new_tab: true
+
+gh_edit_link: true
+gh_edit_link_text: Edit this page on GitHub
+gh_edit_repository: https://github.com/LouisRiverstone/migro
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: edit
+
+footer_content: 'migro is MIT licensed. <a href="https://github.com/LouisRiverstone/migro">Source on GitHub</a>.'
+
+callouts:
+  note:
+    title: Note
+    color: blue
+  warning:
+    title: Warning
+    color: red
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor
+  - node_modules

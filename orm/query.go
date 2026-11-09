@@ -10,8 +10,10 @@ import (
 
 // Query is a mutable, chainable query for model T.
 type Query[T any] struct {
-	db *migro.DB
-	g  *gorm.DB
+	db     *migro.DB
+	g      *gorm.DB
+	with   []withSpec
+	counts []string
 }
 
 func (q *Query[T]) s(ctx context.Context) *gorm.DB {
@@ -85,6 +87,9 @@ func (q *Query[T]) Get(ctx context.Context) ([]T, error) {
 	if err := q.s(ctx).Find(&out).Error; err != nil {
 		return nil, wrap(err, "get")
 	}
+	if err := q.hydrate(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -94,7 +99,11 @@ func (q *Query[T]) First(ctx context.Context) (*T, error) {
 	if err := q.s(ctx).Take(&v).Error; err != nil {
 		return nil, wrap(err, "first")
 	}
-	return &v, nil
+	rows := []T{v}
+	if err := q.hydrate(ctx, rows); err != nil {
+		return nil, err
+	}
+	return &rows[0], nil
 }
 
 func (q *Query[T]) Count(ctx context.Context) (int64, error) {
@@ -146,6 +155,9 @@ func (q *Query[T]) Paginate(ctx context.Context, page, perPage int) (Page[T], er
 	rows := []T{}
 	if err := q.s(ctx).Limit(perPage).Offset((page - 1) * perPage).Find(&rows).Error; err != nil {
 		return Page[T]{}, wrap(err, "paginate")
+	}
+	if err := q.hydrate(ctx, rows); err != nil {
+		return Page[T]{}, err
 	}
 	last := int((n + int64(perPage) - 1) / int64(perPage))
 	return Page[T]{Data: rows, Total: n, PerPage: perPage, CurrentPage: page, LastPage: last}, nil

@@ -320,7 +320,7 @@ import (
 
 // %[3]sFactory builds %[4]s values. Fill in the defaults, then use it from seeders:
 //
-//	%[3]sFactory().Apply("admin").With("posts", 3).CreateMany(ctx, db, 10)
+//	%[3]sFactory().CreateMany(ctx, db, 10)
 func %[3]sFactory() *seed.Factory[%[4]s] {
 	return seed.Define(func(f *seed.Faker) %[4]s {
 		return %[4]s{

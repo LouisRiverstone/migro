@@ -29,6 +29,19 @@ const (
 	AfterFind    = "after:find"
 )
 
+type silentKey struct{}
+
+// WithoutEvents returns a context whose operations emit no events (Laravel's WithoutModelEvents).
+func WithoutEvents(ctx context.Context) context.Context {
+	return context.WithValue(ctx, silentKey{}, true)
+}
+
+// Silenced reports whether ctx came from WithoutEvents.
+func Silenced(ctx context.Context) bool {
+	v, _ := ctx.Value(silentKey{}).(bool)
+	return v
+}
+
 // Event is what handlers receive.
 type Event struct {
 	Name string
@@ -121,6 +134,9 @@ func call(ctx context.Context, h Handler, e Event) (err error) {
 //   - For "before:*" events the first handler error stops dispatch and is returned as EVENT_ABORTED.
 //   - For other events every handler runs and failures are joined into EVENT_HANDLER_FAILED.
 func (b *Bus) Emit(ctx context.Context, e Event) error {
+	if Silenced(ctx) {
+		return nil
+	}
 	var errs []error
 	for _, s := range b.snapshot(e.Name) {
 		if s.once {

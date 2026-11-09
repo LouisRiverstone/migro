@@ -359,7 +359,7 @@ func (c *call) runSeeders(db *migro.DB, class string, once bool) error {
 	if class != "" {
 		res, err = r.RunOnly(c.ctx, class)
 	} else {
-		res, err = r.Run(c.ctx)
+		res, err = r.Seed(c.ctx)
 	}
 	for _, n := range res.Ran {
 		c.printf("Seeded:   %s\n", n)

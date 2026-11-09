@@ -126,7 +126,9 @@ func TestPretendChangesNothing(t *testing.T) {
 		t.Fatalf("pretend run: %+v %v", res, err)
 	}
 	sql := strings.Join(res.SQL["20260101000001_create_a_table"], "\n")
-	if !strings.Contains(sql, `CREATE TABLE "lv_a"`) || !strings.Contains(sql, "CREATE INDEX") {
+	// identifier quoting differs per database ("lv_a" vs `lv_a`), so compare without quotes
+	plain := strings.NewReplacer(`"`, "", "`", "", "[", "", "]", "").Replace(sql)
+	if !strings.Contains(plain, "CREATE TABLE lv_a") || !strings.Contains(plain, "CREATE INDEX") {
 		t.Fatalf("recorded sql: %s", sql)
 	}
 	gm := db.Gorm.Migrator()

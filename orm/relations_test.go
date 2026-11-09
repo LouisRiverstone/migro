@@ -84,7 +84,7 @@ func TestHasManyThrough(t *testing.T) {
 	g.Create(&[]Citizen{{CountryID: 1, Name: "ana"}, {CountryID: 1, Name: "bia"}, {CountryID: 2, Name: "caio"}})
 	g.Create(&[]Story{{CitizenID: 1, Title: "s1"}, {CitizenID: 1, Title: "s2"}, {CitizenID: 2, Title: "s3"}, {CitizenID: 3, Title: "s4"}})
 
-	rel := orm.HasManyThrough[Story, Citizen]{ForeignKey: "country_id", ThroughForeignKey: "citizen_id",
+	rel := orm.HasManyThroughLoader[Story, Citizen]{ForeignKey: "country_id", ThroughForeignKey: "citizen_id",
 		Scope: func(q *gorm.DB) *gorm.DB { return q.Order("id ASC") }}
 	got, err := rel.Load(ctx, db, []any{uint(1), uint(2), uint(3), uint(1)})
 	if err != nil {
@@ -101,7 +101,7 @@ func TestHasManyThrough(t *testing.T) {
 	if len(got2[int64(2)]) != 1 {
 		t.Fatalf("key type mismatch: %+v", got2)
 	}
-	if _, err := (orm.HasManyThrough[Story, Citizen]{}).Load(ctx, db, []any{1}); migro.CodeOf(err) != migro.InvalidSchema {
+	if _, err := (orm.HasManyThroughLoader[Story, Citizen]{}).Load(ctx, db, []any{1}); migro.CodeOf(err) != migro.InvalidSchema {
 		t.Fatalf("missing keys should fail: %v", err)
 	}
 	if m, err := rel.Load(ctx, db, nil); err != nil || len(m) != 0 {
@@ -150,8 +150,8 @@ func TestMorphToManyAndInverse(t *testing.T) {
 	pivot := func(typ string) orm.Pivot {
 		return orm.Pivot{Table: "taggables", MorphIDColumn: "taggable_id", MorphTypeCol: "taggable_type", RelatedIDCol: "tag_id", MorphType: typ}
 	}
-	articleTags := orm.MorphToMany[Tag]{Pivot: pivot("article")}
-	videoTags := orm.MorphToMany[Tag]{Pivot: pivot("video")}
+	articleTags := orm.MorphToManyLoader[Tag]{Pivot: pivot("article")}
+	videoTags := orm.MorphToManyLoader[Tag]{Pivot: pivot("video")}
 
 	if err := articleTags.Attach(ctx, db, uint(1), uint(1), uint(2)); err != nil {
 		t.Fatal(err)
@@ -174,11 +174,11 @@ func TestMorphToManyAndInverse(t *testing.T) {
 	}
 
 	// Inverse: which articles / videos carry tag 1?
-	byTag, err := orm.MorphedByMany[Article]{Pivot: pivot("article")}.Load(ctx, db, []any{uint(1)})
+	byTag, err := orm.MorphedByManyLoader[Article]{Pivot: pivot("article")}.Load(ctx, db, []any{uint(1)})
 	if err != nil || len(byTag[uint(1)]) != 1 || byTag[uint(1)][0].Title != "a1" {
 		t.Fatalf("inverse articles: %+v %v", byTag, err)
 	}
-	vids, _ := orm.MorphedByMany[Video]{Pivot: pivot("video")}.Load(ctx, db, []any{uint(1)})
+	vids, _ := orm.MorphedByManyLoader[Video]{Pivot: pivot("video")}.Load(ctx, db, []any{uint(1)})
 	if len(vids[uint(1)]) != 1 {
 		t.Fatalf("inverse videos: %+v", vids)
 	}
@@ -210,7 +210,7 @@ func TestMorphToManyAndInverse(t *testing.T) {
 	if len(left[uint(1)]) != 0 {
 		t.Fatalf("detach all failed: %+v", left)
 	}
-	if err := (orm.MorphToMany[Tag]{}).Attach(ctx, db, 1, 1); !errors.Is(err, migro.Newf(migro.InvalidSchema, "")) {
+	if err := (orm.MorphToManyLoader[Tag]{}).Attach(ctx, db, 1, 1); !errors.Is(err, migro.Newf(migro.InvalidSchema, "")) {
 		t.Fatalf("empty pivot should fail: %v", err)
 	}
 }

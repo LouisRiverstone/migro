@@ -434,6 +434,27 @@ func (t *Table) compileAlter(d dialect.Dialect) ([]string, error) {
 	}
 	q := d.Quote(t.name)
 	var out []string
+	drop := func(names []string, fn func(table, name string) string, what string) error {
+		for _, n := range names {
+			s := fn(t.name, n)
+			if s == "" {
+				return migro.Newf(migro.UnsupportedFeature, "%s: drop %s unsupported", d.Name(), what)
+			}
+			out = append(out, s)
+		}
+		return nil
+	}
+	// Constraints and indexes go first: databases reject dropping a column that an index or
+	// foreign key still uses (SQLite, MySQL) or lose the constraint along with it (PostgreSQL).
+	if err := drop(t.dropForeigns, d.DropForeign, "foreign key"); err != nil {
+		return nil, err
+	}
+	if err := drop(t.dropUniques, d.DropConstraint, "unique constraint"); err != nil {
+		return nil, err
+	}
+	if err := drop(t.dropIndexes, d.DropIndex, "index"); err != nil {
+		return nil, err
+	}
 	for _, c := range t.columns {
 		s, err := c.sql(d, false)
 		if err != nil {
@@ -446,25 +467,6 @@ func (t *Table) compileAlter(d dialect.Dialect) ([]string, error) {
 	}
 	for _, r := range t.renames {
 		out = append(out, d.RenameColumn(t.name, r[0], r[1]))
-	}
-	drop := func(names []string, fn func(table, name string) string, what string) error {
-		for _, n := range names {
-			s := fn(t.name, n)
-			if s == "" {
-				return migro.Newf(migro.UnsupportedFeature, "%s: drop %s unsupported", d.Name(), what)
-			}
-			out = append(out, s)
-		}
-		return nil
-	}
-	if err := drop(t.dropIndexes, d.DropIndex, "index"); err != nil {
-		return nil, err
-	}
-	if err := drop(t.dropUniques, d.DropConstraint, "unique constraint"); err != nil {
-		return nil, err
-	}
-	if err := drop(t.dropForeigns, d.DropForeign, "foreign key"); err != nil {
-		return nil, err
 	}
 	if len(t.primary) > 0 {
 		if !d.SupportsAddConstraint() {

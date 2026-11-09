@@ -68,13 +68,13 @@ func inClause(db *migro.DB, col string) string { return db.Dialect.Quote(col) + 
 
 // ---- hasManyThrough ------------------------------------------------------------------
 
-// HasManyThrough loads T rows reachable from a parent via a Through model, like Lucid's
+// HasManyThroughLoader loads T rows reachable from a parent via a Through model, like Lucid's
 // hasManyThrough: Country -> User (Through) -> Post (T).
 //
 //	ForeignKey         column on Through pointing at the parent   (users.country_id)
 //	ThroughLocalKey    Through's key referenced by T              (users.id), default "id"
 //	ThroughForeignKey  column on T pointing at Through            (posts.user_id)
-type HasManyThrough[T any, Through any] struct {
+type HasManyThroughLoader[T any, Through any] struct {
 	ForeignKey        string
 	ThroughLocalKey   string
 	ThroughForeignKey string
@@ -83,14 +83,14 @@ type HasManyThrough[T any, Through any] struct {
 }
 
 // Load returns, per parent key, the T rows reachable through Through.
-func (r HasManyThrough[T, Through]) Load(ctx context.Context, db *migro.DB, parentKeys []any) (map[any][]T, error) {
+func (r HasManyThroughLoader[T, Through]) Load(ctx context.Context, db *migro.DB, parentKeys []any) (map[any][]T, error) {
 	out := map[any][]T{}
 	keys, origKeys := uniqueKeys(parentKeys)
 	if len(keys) == 0 {
 		return out, nil
 	}
 	if r.ForeignKey == "" || r.ThroughForeignKey == "" {
-		return nil, migro.Newf(migro.InvalidSchema, "HasManyThrough needs ForeignKey and ThroughForeignKey")
+		return nil, migro.Newf(migro.InvalidSchema, "HasManyThroughLoader needs ForeignKey and ThroughForeignKey")
 	}
 	localKey := r.ThroughLocalKey
 	if localKey == "" {
@@ -249,27 +249,27 @@ func (p Pivot) base(ctx context.Context, db *migro.DB) *gorm.DB {
 	return db.Gorm.WithContext(ctx).Table(p.Table).Where(db.Dialect.Quote(p.MorphTypeCol)+" = ?", p.MorphType)
 }
 
-// MorphToMany loads T (the related side, e.g. Tag) for polymorphic parents (e.g. Post).
+// MorphToManyLoader loads T (the related side, e.g. Tag) for polymorphic parents (e.g. Post).
 // RelatedKey is T's key referenced by the pivot, default "id".
-type MorphToMany[T any] struct {
+type MorphToManyLoader[T any] struct {
 	Pivot      Pivot
 	RelatedKey string
 	Scope      func(*gorm.DB) *gorm.DB
 }
 
-// MorphedByMany is the inverse: given related keys (Tags), load the morphable T (Posts).
+// MorphedByManyLoader is the inverse: given related keys (Tags), load the morphable T (Posts).
 // MorphKey is T's key stored in the pivot, default "id".
-type MorphedByMany[T any] struct {
+type MorphedByManyLoader[T any] struct {
 	Pivot    Pivot
 	MorphKey string
 	Scope    func(*gorm.DB) *gorm.DB
 }
 
-func (r MorphToMany[T]) Load(ctx context.Context, db *migro.DB, parentKeys []any) (map[any][]T, error) {
+func (r MorphToManyLoader[T]) Load(ctx context.Context, db *migro.DB, parentKeys []any) (map[any][]T, error) {
 	return loadViaPivot[T](ctx, db, r.Pivot, r.Pivot.MorphIDColumn, r.Pivot.RelatedIDCol, keyOr(r.RelatedKey), r.Scope, parentKeys)
 }
 
-func (r MorphedByMany[T]) Load(ctx context.Context, db *migro.DB, relatedKeys []any) (map[any][]T, error) {
+func (r MorphedByManyLoader[T]) Load(ctx context.Context, db *migro.DB, relatedKeys []any) (map[any][]T, error) {
 	return loadViaPivot[T](ctx, db, r.Pivot, r.Pivot.RelatedIDCol, r.Pivot.MorphIDColumn, keyOr(r.MorphKey), r.Scope, relatedKeys)
 }
 
@@ -334,14 +334,14 @@ func loadViaPivot[T any](ctx context.Context, db *migro.DB, p Pivot, fromCol, to
 }
 
 // Attach links related keys to the parent, skipping links that already exist.
-func (r MorphToMany[T]) Attach(ctx context.Context, db *migro.DB, parentKey any, relatedKeys ...any) error {
+func (r MorphToManyLoader[T]) Attach(ctx context.Context, db *migro.DB, parentKey any, relatedKeys ...any) error {
 	if err := r.Pivot.validate(); err != nil {
 		return err
 	}
 	return db.Transaction(ctx, func(tx *migro.DB) error { return r.attach(ctx, tx, parentKey, relatedKeys) })
 }
 
-func (r MorphToMany[T]) existing(ctx context.Context, db *migro.DB, parentKey any) (map[string]any, error) {
+func (r MorphToManyLoader[T]) existing(ctx context.Context, db *migro.DB, parentKey any) (map[string]any, error) {
 	var rows []map[string]any
 	q := r.Pivot.base(ctx, db).Select([]string{r.Pivot.RelatedIDCol}).Where(db.Dialect.Quote(r.Pivot.MorphIDColumn)+" = ?", parentKey)
 	if err := q.Find(&rows).Error; err != nil {
@@ -354,7 +354,7 @@ func (r MorphToMany[T]) existing(ctx context.Context, db *migro.DB, parentKey an
 	return have, nil
 }
 
-func (r MorphToMany[T]) attach(ctx context.Context, db *migro.DB, parentKey any, relatedKeys []any) error {
+func (r MorphToManyLoader[T]) attach(ctx context.Context, db *migro.DB, parentKey any, relatedKeys []any) error {
 	have, err := r.existing(ctx, db, parentKey)
 	if err != nil {
 		return err
@@ -376,7 +376,7 @@ func (r MorphToMany[T]) attach(ctx context.Context, db *migro.DB, parentKey any,
 }
 
 // Detach removes the given links, or every link of the parent when no keys are passed.
-func (r MorphToMany[T]) Detach(ctx context.Context, db *migro.DB, parentKey any, relatedKeys ...any) error {
+func (r MorphToManyLoader[T]) Detach(ctx context.Context, db *migro.DB, parentKey any, relatedKeys ...any) error {
 	if err := r.Pivot.validate(); err != nil {
 		return err
 	}
@@ -388,7 +388,7 @@ func (r MorphToMany[T]) Detach(ctx context.Context, db *migro.DB, parentKey any,
 }
 
 // Sync makes the parent's links exactly relatedKeys, atomically.
-func (r MorphToMany[T]) Sync(ctx context.Context, db *migro.DB, parentKey any, relatedKeys ...any) error {
+func (r MorphToManyLoader[T]) Sync(ctx context.Context, db *migro.DB, parentKey any, relatedKeys ...any) error {
 	if err := r.Pivot.validate(); err != nil {
 		return err
 	}

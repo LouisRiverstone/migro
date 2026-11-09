@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/LouisRiverstone/migro"
+	"github.com/LouisRiverstone/migro/events"
 	"github.com/LouisRiverstone/migro/migrate"
 	"github.com/LouisRiverstone/migro/schema"
 )
@@ -29,6 +30,7 @@ type Runner struct {
 	db      *migro.DB
 	env     string
 	once    bool
+	silent  bool
 	table   string
 	seeders []Seeder
 }
@@ -41,6 +43,13 @@ func WithEnvironment(env string) Option { return func(r *Runner) { r.env = env }
 // Once records executed seeders in a table so re-running skips them. Without it seeders run every
 // time, like Lucid — write them idempotently (e.g. with FirstOrCreate).
 func Once() Option { return func(r *Runner) { r.once = true } }
+
+// WithoutEvents runs seeders with model events muted (Laravel's WithoutModelEvents trait), so
+// observers and event handlers do not fire for seeded rows.
+func WithoutEvents() Option { return func(r *Runner) { r.silent = true } }
+
+// RootSeeder is the name of the seeder `db:seed` starts from when one is registered.
+const RootSeeder = "DatabaseSeeder"
 
 func NewRunner(db *migro.DB, opts ...Option) *Runner {
 	r := &Runner{db: db, table: "migro_seeds", env: firstEnv("MIGRO_ENV", "APP_ENV")}
@@ -96,8 +105,17 @@ type seedRow struct {
 	RanAt time.Time
 }
 
-// Run executes every eligible seeder.
+// Run executes every eligible seeder, in name order.
 func (r *Runner) Run(ctx context.Context) (Result, error) { return r.run(ctx, nil) }
+
+// Seed is `php artisan db:seed`: it runs the DatabaseSeeder when one is registered (which calls the
+// others in the order it needs, see Call), and otherwise every seeder in name order (Adonis's db:seed).
+func (r *Runner) Seed(ctx context.Context) (Result, error) {
+	if slices.ContainsFunc(r.seeders, func(s Seeder) bool { return s.Name == RootSeeder }) {
+		return r.RunOnly(ctx, RootSeeder)
+	}
+	return r.Run(ctx)
+}
 
 // RunOnly executes only the named seeders (still subject to environment rules).
 func (r *Runner) RunOnly(ctx context.Context, names ...string) (Result, error) {
@@ -111,6 +129,9 @@ func (r *Runner) RunOnly(ctx context.Context, names ...string) (Result, error) {
 
 func (r *Runner) run(ctx context.Context, only []string) (Result, error) {
 	var res Result
+	if r.silent {
+		ctx = events.WithoutEvents(ctx)
+	}
 	done := map[string]bool{}
 	if r.once {
 		if err := schema.New(r.db).CreateTableIfNotExists(ctx, r.table, func(t *schema.Table) {
