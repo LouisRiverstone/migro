@@ -72,7 +72,7 @@ func main() {
 | `migration:install` | Create the tracking tables now. |
 | `migration:unlock` | Release a lock left by a crashed run. |
 | `migration:diff [name]` | Generate a migration from your models; see [below](schema-diff.md). |
-| `db:seed` | Run seeders. `--class=UserSeeder` runs one; `--once` skips those that already ran. |
+| `db:seed` | Run seeders. Starts from `DatabaseSeeder` when you registered one (it calls the others with `seed.Call`), otherwise runs every seeder by name. `--class=UserSeeder` runs one; `--once` skips those that already ran. |
 | `make:seeder <Name>` | New seeder. |
 | `make:factory <Name>` | New factory. `--model=example.com/app/models.User` names the model (default: `<module>/app/models`). |
 | `make:model <Name>` | New model. `-m` also creates its migration, `-f` a factory, `-s` a seeder, `-a` all three. |

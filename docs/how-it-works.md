@@ -85,7 +85,7 @@ You do not have to use the `migro` program at all. `console.App` is a library: p
 
 ## Models, queries and transactions
 
-`orm.New[User](db)` returns a thin repository over `db.Gorm`. Its queries are GORM queries; `Query().Where(...)` adds to a GORM statement, so soft deletes, hooks, `Preload` and scopes behave as in GORM. `db.Transaction(ctx, fn)` hands `fn` a `*migro.DB` bound to the transaction, and every layer (schema, query, orm, migrate, seed) accepts it.
+`orm.New[User](db)` returns a thin repository over `db.Gorm`. Its queries are GORM queries; `Query().Where(...)` adds to a GORM statement, so soft deletes, hooks, `Preload` and scopes behave as in GORM. Rows it returns are *bound*: the model remembers its `*migro.DB`, a pointer to itself and a snapshot of its columns, which is what powers `Save` (changed columns only), `IsDirty` and lazy relations. Relation fields (`HasMany[Post]`, `BelongsToMany[Role]`, `MorphTo`, ...) are resolved by reflection against the GORM schema; `With` loads each relation with one `IN` query (two for pivot and through relations) and fills the fields in place. Nothing is rewritten on the GORM side, so plain GORM relations and `Preload` keep working. `db.Transaction(ctx, fn)` hands `fn` a `*migro.DB` bound to the transaction, and every layer (schema, query, orm, migrate, seed) accepts it.
 
 ## Events
 

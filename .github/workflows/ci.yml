@@ -16,7 +16,6 @@ jobs:
 
   postgres:
     runs-on: ubuntu-latest
-    continue-on-error: true # live-server suite not yet verified green
     services:
       postgres:
         image: postgres:16
@@ -34,7 +33,6 @@ jobs:
 
   mysql:
     runs-on: ubuntu-latest
-    continue-on-error: true # live-server suite not yet verified green
     services:
       mysql:
         image: mysql:8

@@ -25,7 +25,7 @@ description: What is verified on each database, and per-database behavior and li
 
 ## Per-database notes
 
-- **MySQL / MariaDB:** `Increments`/`BigIncrements` are `unsigned`, so a foreign-key column must be `Integer(...).Unsigned()` / `BigInteger(...).Unsigned()` to match, otherwise MySQL rejects the constraint. `ForeignID` already does this. Enums are native.
+- **MySQL / MariaDB:** `Increments`/`BigIncrements` are `unsigned`, so a foreign-key column must be `Integer(...).Unsigned()` / `BigInteger(...).Unsigned()` to match, otherwise MySQL rejects the constraint. `ForeignID` already does this. Enums are native. DDL is not transactional, so a migration that fails halfway leaves its earlier statements applied. An index on a column that already has a foreign key replaces the key's automatic index, and MySQL then refuses to drop it (error 1553) until the key is gone.
 - **SQLite:** cannot add a foreign key or primary key to an existing table (`UNSUPPORTED_FEATURE`); a unique constraint added with `AlterTable` becomes a unique index. Pure Go driver, no cgo.
 - **Redshift:** no `CREATE INDEX` (`UNSUPPORTED_FEATURE`); JSON maps to `SUPER`; keys use `IDENTITY`. Constraints are informational only.
 - **SQL Server:** `Enum` is `nvarchar` plus a `CHECK`; `Boolean` is `bit`.

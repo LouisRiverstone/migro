@@ -53,6 +53,7 @@ go test -race -count=1 ./...
 | `cluster/` | Sharding |
 | `console/` | The command implementations (`commands.go`, `make.go`, stubs) |
 | `cmd/migro/` | The `migro` program and the launcher that builds the project runner |
+| `integration/` | End-to-end suite: Go migrations, class seeders, factories and Eloquent/Lucid-style models for a whole database (indexes, 1:1, 1:N, N:M, polymorphic, self-referencing) |
 | `internal/testdb/` | Opens the database the tests run against |
 | `docs/` | This documentation site |
 
@@ -127,7 +128,7 @@ A few tests are SQLite-only by design (they need two database files or SQLite pr
 3. **Do not mix unrelated changes**: no drive-by reformatting, renames or dependency bumps.
 4. **Run the checks** from [Set up](#set-up) and, if your change touches SQL generation or the migrator, run the suite against PostgreSQL or MySQL too.
 5. **Open the pull request against `main`** and fill in the template: what and why, how you tested it, and the checklist. Link the issue with `Fixes #123` when there is one.
-6. **CI must be green.** The SQLite job is required. The PostgreSQL and MySQL jobs are currently non-blocking, but please look at them: a failure there usually points at a real portability bug.
+6. **CI must be green.** All three jobs (SQLite, PostgreSQL and MySQL) are required: a failure on a live server usually points at a real portability bug.
 7. **Review:** a maintainer will review. Push follow-up commits to the same branch rather than opening a new PR. PRs may be squash-merged, so write the PR title like a good commit message.
 
 ### Pull request checklist
