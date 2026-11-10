@@ -72,7 +72,7 @@ func (JSONColumn[T]) GormDataType() string { return "json" }
 
 // GormDBDataType picks the native type per database.
 func (JSONColumn[T]) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
-	switch db.Dialector.Name() {
+	switch db.Name() {
 	case "postgres":
 		return "JSONB"
 	case "mysql":

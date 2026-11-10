@@ -15,6 +15,8 @@ go vet ./...
 go test -race -count=1 ./...
 ```
 
+Optional: `pre-commit install` runs `gofmt` and `golangci-lint` (on changed code) before each commit (needs [pre-commit](https://pre-commit.com), `gofmt` and `golangci-lint` installed locally).
+
 1. For anything bigger than a small fix, **open an issue first**.
 2. Branch from `main`; keep the PR to one concern.
 3. Write tests that fail without your change (SQLite is enough; see the guide for PostgreSQL/MySQL).

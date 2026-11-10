@@ -169,7 +169,7 @@ func (h *hookedConn) PrepareContext(ctx context.Context, q string) (driver.Stmt,
 	if p, ok := h.Conn.(driver.ConnPrepareContext); ok {
 		return p.PrepareContext(ctx, q)
 	}
-	return h.Conn.Prepare(q)
+	return h.Prepare(q)
 }
 
 func (h *hookedConn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx, error) {
@@ -213,7 +213,7 @@ func (r rawConn) Exec(ctx context.Context, query string) error {
 			return err
 		}
 	}
-	st, err := r.Conn.Prepare(query)
+	st, err := r.Prepare(query)
 	if err != nil {
 		return err
 	}

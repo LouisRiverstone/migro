@@ -57,7 +57,7 @@ func dialectImports(environ []string) ([]string, error) {
 	seen := map[string]bool{}
 	for _, kv := range environ {
 		k, v, _ := strings.Cut(kv, "=")
-		if k != "MIGRO_DIALECT" && !(strings.HasPrefix(k, "MIGRO_") && strings.HasSuffix(k, "_DIALECT")) {
+		if k != "MIGRO_DIALECT" && (!strings.HasPrefix(k, "MIGRO_") || !strings.HasSuffix(k, "_DIALECT")) {
 			continue
 		}
 		if v == "" {
@@ -94,7 +94,8 @@ func hasGoFiles(dir string) bool {
 // discoverModels lists exported struct types in dir, skipping any whose doc comment contains "migro:ignore".
 func discoverModels(dir string) (pkg string, names []string, err error) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, parser.ParseComments)
+	pkgs, err := parser.ParseDir( //nolint:staticcheck // build tags are irrelevant for model discovery
+		fset, dir, func(fi os.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, parser.ParseComments)
 	if err != nil {
 		return "", nil, err
 	}

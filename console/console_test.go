@@ -218,7 +218,7 @@ func TestUsageErrorsAndConnections(t *testing.T) {
 		{"make:migration", "a", "--create=x", "--table=y"},
 		{"migration:diff", "--rename=bad"},
 	} {
-		if code := h.run(args...); code != console.ExitUsage && !(args[0] == "migration:diff" && code == console.ExitError) {
+		if code := h.run(args...); code != console.ExitUsage && (args[0] != "migration:diff" || code != console.ExitError) {
 			t.Errorf("%v: want usage exit, got %d (%s)", args, code, h.err)
 		}
 	}

@@ -14,8 +14,8 @@ func TestQueriesAndRelationsReturnCollections(t *testing.T) {
 	db := seeded(t)
 	users := orm.New[User](db)
 
-	var col orm.Collection[User] = must(users.Query().OrderBy("id", "asc").Get(ctx)) // no conversion needed
-	var plain []User = col                                                           // and back to []T
+	col := must(users.Query().OrderBy("id", "asc").Get(ctx)) // no conversion needed
+	var plain []User = col                                   // and back to []T
 	if col.Count() != 3 || len(plain) != 3 || col.IsEmpty() {
 		t.Fatalf("count %d", col.Count())
 	}

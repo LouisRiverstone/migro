@@ -31,7 +31,7 @@ func HashRouter(shardNames []string) Router {
 			return "", migro.Newf(migro.ShardNotFound, "cannot route key %v", key)
 		}
 		h := fnv.New32a()
-		_, _ = h.Write([]byte(fmt.Sprint(key)))
+		_, _ = fmt.Fprint(h, key)
 		return names[int(h.Sum32())%len(names)], nil
 	}
 }

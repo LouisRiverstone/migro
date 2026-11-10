@@ -182,10 +182,7 @@ func (p pivotOps) def() (*relDef, any, error) {
 // keyOf accepts either a raw key or a model whose key the relation points at.
 func keyOf(ctx context.Context, d *relDef, v any) (any, error) {
 	rv := reflect.ValueOf(v)
-	for rv.Kind() == reflect.Pointer && !rv.IsNil() {
-		if rv.Elem().Kind() != reflect.Struct {
-			break
-		}
+	if rv.Kind() == reflect.Pointer && !rv.IsNil() && rv.Elem().Kind() == reflect.Struct {
 		return fieldOf(ctx, d.relSch, rv.Elem(), d.rk)
 	}
 	return v, nil
