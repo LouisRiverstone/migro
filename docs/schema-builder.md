@@ -1,7 +1,7 @@
 ---
 title: Schema builder
 nav_order: 6
-description: Knex-style table builder: columns, indexes, foreign keys, relations.
+description: "Knex-style table builder: columns, indexes, foreign keys, relations."
 ---
 
 # Schema builder

@@ -1,7 +1,7 @@
 ---
 title: Command line
 nav_order: 12
-description: migro CLI: make:migration, migration:run, migration:rollback and friends.
+description: "migro CLI: make:migration, migration:run, migration:rollback and friends."
 ---
 
 # Command line
