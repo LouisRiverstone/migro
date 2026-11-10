@@ -67,7 +67,7 @@ func (b *Builder) Join(clause string, args ...any) *Builder {
 func (b *Builder) OrderBy(col, dir string) *Builder {
 	d := strings.ToLower(dir)
 	if d != "asc" && d != "desc" {
-		b.g.AddError(migro.Newf(migro.QueryFailed, "invalid order direction %q", dir))
+		_ = b.g.AddError(migro.Newf(migro.QueryFailed, "invalid order direction %q", dir))
 		return b
 	}
 	b.g = b.g.Order(b.db.Dialect.Quote(col) + " " + strings.ToUpper(d))

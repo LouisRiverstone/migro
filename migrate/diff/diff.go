@@ -406,9 +406,9 @@ func apply(t *schema.Table, c ColumnDef) {
 	var col *schema.Column
 	switch {
 	case c.Auto && c.Big:
-		col = t.BigIncrements(c.Name)
+		t.BigIncrements(c.Name)
 	case c.Auto:
-		col = t.Increments(c.Name)
+		t.Increments(c.Name)
 	default:
 		switch c.Kind {
 		case dialect.KindString:

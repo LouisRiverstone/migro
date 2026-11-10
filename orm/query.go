@@ -47,7 +47,7 @@ func (q *Query[T]) Select(cols ...string) *Query[T] {
 func (q *Query[T]) OrderBy(col, dir string) *Query[T] {
 	d := strings.ToLower(dir)
 	if d != "asc" && d != "desc" {
-		q.g.AddError(migro.Newf(migro.QueryFailed, "invalid order direction %q", dir))
+		_ = q.g.AddError(migro.Newf(migro.QueryFailed, "invalid order direction %q", dir))
 		return q
 	}
 	q.g = q.g.Order(q.db.Dialect.Quote(col) + " " + strings.ToUpper(d))
