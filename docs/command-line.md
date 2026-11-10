@@ -6,6 +6,19 @@ description: migro CLI: make:migration, migration:run, migration:rollback and fr
 
 # Command line
 
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
+`migro` is the command-line interface included with the library, the counterpart of Laravel's Artisan and Adonis's Ace. It generates files (`make:*`) and runs migrations and seeders against your database. Run `migro help` for the list of commands.
+
+## Installation
+
 Install it once: `go install github.com/LouisRiverstone/migro/cmd/migro@latest`. Then, from your project (anywhere inside the Go module), with the application running or not:
 
 ```
@@ -16,7 +29,7 @@ migro migration:status
 migro db:seed
 ```
 
-## Configure the database
+## Configuration
 
 `migro` reads `MIGRO_DIALECT` and `MIGRO_DSN` from the environment, or from a `.env` file in the project root (real environment variables win).
 
@@ -33,7 +46,7 @@ MIGRO_ANALYTICS_DSN=user:pass@tcp(127.0.0.1:3306)/analytics?parseTime=true
 
 Optional folders (defaults shown): `MIGRO_MIGRATIONS_DIR=database/migrations`, `MIGRO_SEEDERS_DIR=database/seeders`, `MIGRO_FACTORIES_DIR=database/factories`, `MIGRO_MODELS_DIR=app/models`.
 
-## How it runs
+### How it runs
 
 `make:*` commands only write files. Every other command builds a small runner inside your module (in a temporary `_migro_run_*` folder, deleted afterwards) that imports your migrations, seeders and the database driver, then executes it. That is how your Go files get compiled in, so each command takes as long as a `go build`. If your `go.mod` lacks the driver module, `-mod=mod` lets Go add it. Add `_migro_run_*/` to `.gitignore` in case a run is killed.
 
@@ -58,7 +71,7 @@ func main() {
 }
 ```
 
-## Commands
+## Available commands
 
 | Command | What it does |
 |---|---|
@@ -90,11 +103,11 @@ $ migro migration:rollback --step=1 --pretend
 DROP TABLE "posts";
 ```
 
-## Production safety
+### Production safety
 
 When `MIGRO_ENV` (or `APP_ENV`) is `production`, commands that change data (`migration:run`, `rollback`, `reset`, `refresh`, `fresh`, `db:seed`) ask for confirmation in a terminal, and refuse with `PRODUCTION_BLOCKED` when there is none (CI, pipes). Pass `--force` to proceed without asking. `--pretend`, `migration:status` and the `make:*` commands never ask. `migration:fresh` and `migration:reset` are destructive anywhere else; there is no prompt outside production, as in Laravel.
 
-## Several databases
+### Several databases
 
 Each connection has its own tracking table. By default every registered migration runs on whichever connection you select. To give a connection its own migrations, pin them:
 

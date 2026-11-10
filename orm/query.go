@@ -14,6 +14,7 @@ type Query[T any] struct {
 	g      *gorm.DB
 	with   []withSpec
 	counts []string
+	skip   *skipSet // global scopes switched off for this query
 }
 
 func (q *Query[T]) s(ctx context.Context) *gorm.DB {
@@ -82,8 +83,8 @@ func (q *Query[T]) OnlyTrashed() *Query[T] {
 	return q
 }
 
-func (q *Query[T]) Get(ctx context.Context) ([]T, error) {
-	out := []T{}
+func (q *Query[T]) Get(ctx context.Context) (Collection[T], error) {
+	out := Collection[T]{}
 	if err := q.s(ctx).Find(&out).Error; err != nil {
 		return nil, wrap(err, "get")
 	}
@@ -133,7 +134,7 @@ func (q *Query[T]) Delete(ctx context.Context) (int64, error) {
 
 // Page is one page of models.
 type Page[T any] struct {
-	Data        []T
+	Data        Collection[T]
 	Total       int64
 	PerPage     int
 	CurrentPage int
@@ -152,7 +153,7 @@ func (q *Query[T]) Paginate(ctx context.Context, page, perPage int) (Page[T], er
 	if err := q.s(ctx).Count(&n).Error; err != nil {
 		return Page[T]{}, wrap(err, "paginate count")
 	}
-	rows := []T{}
+	rows := Collection[T]{}
 	if err := q.s(ctx).Limit(perPage).Offset((page - 1) * perPage).Find(&rows).Error; err != nil {
 		return Page[T]{}, wrap(err, "paginate")
 	}

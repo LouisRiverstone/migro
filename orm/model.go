@@ -40,8 +40,14 @@ type Model[T any] struct{ db *migro.DB }
 func New[T any](db *migro.DB) *Model[T] { return &Model[T]{db: db} }
 
 // Query starts a fluent query.
+//
+// Global scopes declared by the model (see GlobalScoped) are applied to it.
 func (m *Model[T]) Query() *Query[T] {
-	return &Query[T]{db: m.db, g: m.db.Gorm.Model(new(T))}
+	q := &Query[T]{db: m.db, g: m.db.Gorm.Model(new(T)), skip: &skipSet{}}
+	if scopes := globalScopesOf(reflect.TypeFor[T]()); len(scopes) > 0 {
+		q.g = q.g.Scopes(scopeFunc(scopes, q.skip))
+	}
+	return q
 }
 
 func wrap(err error, op string) error {
@@ -61,7 +67,7 @@ func wrap(err error, op string) error {
 // Find loads by primary key; returns migro.ErrNotFound-matching error when missing.
 func (m *Model[T]) Find(ctx context.Context, id any) (*T, error) {
 	var v T
-	if err := m.db.Gorm.WithContext(ctx).First(&v, id).Error; err != nil {
+	if err := m.scoped(ctx).First(&v, id).Error; err != nil {
 		return nil, wrap(err, "find")
 	}
 	bind(m.db, &v, true)
@@ -73,7 +79,7 @@ func (m *Model[T]) FindBy(ctx context.Context, column string, value any) (*T, er
 	return m.Query().Where(m.db.Dialect.Quote(column)+" = ?", value).First(ctx)
 }
 
-func (m *Model[T]) All(ctx context.Context) ([]T, error) { return m.Query().Get(ctx) }
+func (m *Model[T]) All(ctx context.Context) (Collection[T], error) { return m.Query().Get(ctx) }
 
 func (m *Model[T]) Create(ctx context.Context, v *T) error {
 	if err := wrap(m.db.Gorm.WithContext(ctx).Create(v).Error, "create"); err != nil {
@@ -115,12 +121,12 @@ func (m *Model[T]) Destroy(ctx context.Context, ids ...any) (int64, error) {
 }
 
 // FindMany loads several rows by primary key; missing ids are simply absent.
-func (m *Model[T]) FindMany(ctx context.Context, ids ...any) ([]T, error) {
+func (m *Model[T]) FindMany(ctx context.Context, ids ...any) (Collection[T], error) {
 	if len(ids) == 0 {
-		return []T{}, nil
+		return Collection[T]{}, nil
 	}
-	var out []T
-	if err := m.db.Gorm.WithContext(ctx).Find(&out, ids).Error; err != nil {
+	var out Collection[T]
+	if err := m.scoped(ctx).Find(&out, ids).Error; err != nil {
 		return nil, wrap(err, "find many")
 	}
 	bindAll(m.db, out, true)

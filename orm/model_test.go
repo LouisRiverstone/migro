@@ -17,8 +17,8 @@ import (
 type eCountry struct {
 	orm.BaseModel
 	Name  string
-	Users orm.HasMany[eUser]               `gorm:"-" orm:"foreignKey:country_id"`
-	Posts orm.HasManyThrough[ePost, eUser] `gorm:"-" orm:"foreignKey:country_id;throughForeignKey:user_id"`
+	Users orm.HasMany[eUser]               `orm:"foreignKey:country_id"`
+	Posts orm.HasManyThrough[ePost, eUser] `orm:"foreignKey:country_id;throughForeignKey:user_id"`
 }
 
 func (eCountry) TableName() string { return "e_countries" }
@@ -30,10 +30,10 @@ type eUser struct {
 	Email     string
 	Password  string
 	Visits    int
-	Country   orm.BelongsTo[eCountry]  `gorm:"-" orm:"foreignKey:country_id"`
-	Profile   orm.HasOne[eProfile]     `gorm:"-" orm:"foreignKey:user_id"`
-	Posts     orm.HasMany[ePost]       `gorm:"-" orm:"foreignKey:user_id"`
-	Roles     orm.BelongsToMany[eRole] `gorm:"-" orm:"pivotTable:e_role_user;pivotForeignKey:user_id;pivotRelatedForeignKey:role_id;pivotColumns:assigned_by"`
+	Country   orm.BelongsTo[eCountry]  `orm:"foreignKey:country_id"`
+	Profile   orm.HasOne[eProfile]     `orm:"foreignKey:user_id"`
+	Posts     orm.HasMany[ePost]       `orm:"foreignKey:user_id"`
+	Roles     orm.BelongsToMany[eRole] `orm:"pivotTable:e_role_user;pivotForeignKey:user_id;pivotRelatedForeignKey:role_id;pivotColumns:assigned_by"`
 }
 
 func (eUser) TableName() string { return "e_users" }
@@ -55,9 +55,9 @@ type ePost struct {
 	orm.BaseModel
 	UserID   uint
 	Title    string
-	Author   orm.BelongsTo[eUser]    `gorm:"-" orm:"foreignKey:user_id"`
-	Comments orm.MorphMany[eComment] `gorm:"-" orm:"morph:commentable"`
-	Tags     orm.MorphToMany[eTag]   `gorm:"-" orm:"morph:taggable;pivotTable:e_taggables;pivotRelatedForeignKey:tag_id"`
+	Author   orm.BelongsTo[eUser]    `orm:"foreignKey:user_id"`
+	Comments orm.MorphMany[eComment] `orm:"morph:commentable"`
+	Tags     orm.MorphToMany[eTag]   `orm:"morph:taggable;pivotTable:e_taggables;pivotRelatedForeignKey:tag_id"`
 }
 
 func (ePost) TableName() string { return "e_posts" }
@@ -65,7 +65,7 @@ func (ePost) TableName() string { return "e_posts" }
 type eVideo struct {
 	orm.BaseModel
 	Title    string
-	Comments orm.MorphMany[eComment] `gorm:"-" orm:"morph:commentable"`
+	Comments orm.MorphMany[eComment] `orm:"morph:commentable"`
 }
 
 func (eVideo) TableName() string { return "e_videos" }
@@ -80,7 +80,7 @@ func (eRole) TableName() string { return "e_roles" }
 type eTag struct {
 	orm.BaseModel
 	Name  string
-	Posts orm.MorphedByMany[ePost] `gorm:"-" orm:"morph:taggable;pivotTable:e_taggables;pivotForeignKey:tag_id"`
+	Posts orm.MorphedByMany[ePost] `orm:"morph:taggable;pivotTable:e_taggables;pivotForeignKey:tag_id"`
 }
 
 func (eTag) TableName() string { return "e_tags" }
@@ -90,7 +90,7 @@ type eComment struct {
 	CommentableType string
 	CommentableID   uint
 	Body            string
-	Commentable     orm.MorphTo `gorm:"-" orm:"morph:commentable"`
+	Commentable     orm.MorphTo `orm:"morph:commentable"`
 }
 
 func (eComment) TableName() string { return "e_comments" }
@@ -449,14 +449,14 @@ func TestEagerLoadingEveryRelationKind(t *testing.T) {
 
 	users := must(orm.New[eUser](db).Query().With("Profile").With("Posts").With("Country").With("Roles").OrderBy("id", "asc").Get(ctx))
 	ana, bia, caio := users[0], users[1], users[2]
-	if ana.Profile.Value() == nil || ana.Profile.Value().Bio != "hi" || bia.Profile.Value() != nil || !bia.Profile.Loaded() {
-		t.Fatalf("hasOne: %+v / %+v", ana.Profile.Value(), bia.Profile.Value())
+	if ana.Profile.Item() == nil || ana.Profile.Item().Bio != "hi" || bia.Profile.Item() != nil || !bia.Profile.Loaded() {
+		t.Fatalf("hasOne: %+v / %+v", ana.Profile.Item(), bia.Profile.Item())
 	}
 	if len(ana.Posts.Items()) != 2 || len(bia.Posts.Items()) != 1 || len(caio.Posts.Items()) != 0 {
 		t.Fatalf("hasMany: %d %d %d", len(ana.Posts.Items()), len(bia.Posts.Items()), len(caio.Posts.Items()))
 	}
-	if ana.Country.Value().Name != "BR" || caio.Country.Value().Name != "PT" {
-		t.Fatalf("belongsTo: %+v %+v", ana.Country.Value(), caio.Country.Value())
+	if ana.Country.Item().Name != "BR" || caio.Country.Item().Name != "PT" {
+		t.Fatalf("belongsTo: %+v %+v", ana.Country.Item(), caio.Country.Item())
 	}
 	if len(ana.Roles.Items()) != 2 || len(bia.Roles.Items()) != 1 || len(caio.Roles.Items()) != 0 {
 		t.Fatalf("belongsToMany: %v", users)
@@ -477,8 +477,8 @@ func TestEagerLoadingEveryRelationKind(t *testing.T) {
 	}
 
 	posts := must(orm.New[ePost](db).Query().With("Author").With("Comments").With("Tags").OrderBy("id", "asc").Get(ctx))
-	if posts[0].Author.Value().Name != "ana" || posts[2].Author.Value().Name != "bia" {
-		t.Fatalf("belongsTo author: %+v", posts[0].Author.Value())
+	if posts[0].Author.Item().Name != "ana" || posts[2].Author.Item().Name != "bia" {
+		t.Fatalf("belongsTo author: %+v", posts[0].Author.Item())
 	}
 	if len(posts[0].Comments.Items()) != 2 || len(posts[1].Comments.Items()) != 0 {
 		t.Fatalf("morphMany: %d", len(posts[0].Comments.Items()))
@@ -493,13 +493,13 @@ func TestEagerLoadingEveryRelationKind(t *testing.T) {
 	}
 
 	comments := must(orm.New[eComment](db).Query().With("Commentable").OrderBy("id", "asc").Get(ctx))
-	if p, ok := comments[0].Commentable.Value().(*ePost); !ok || p.Title != "p1" || !p.Exists() {
-		t.Fatalf("morphTo post: %+v", comments[0].Commentable.Value())
+	if p, ok := comments[0].Commentable.Item().(*ePost); !ok || p.Title != "p1" || !p.Exists() {
+		t.Fatalf("morphTo post: %+v", comments[0].Commentable.Item())
 	}
-	if v, ok := comments[2].Commentable.Value().(*eVideo); !ok || v.Title != "v1" {
-		t.Fatalf("morphTo video: %+v", comments[2].Commentable.Value())
+	if v, ok := comments[2].Commentable.Item().(*eVideo); !ok || v.Title != "v1" {
+		t.Fatalf("morphTo video: %+v", comments[2].Commentable.Item())
 	}
-	if comments[3].Commentable.Value() != nil || !comments[3].Commentable.Loaded() {
+	if comments[3].Commentable.Item() != nil || !comments[3].Commentable.Loaded() {
 		t.Fatal("dangling morphTo must load as nil")
 	}
 }
@@ -676,7 +676,7 @@ func TestRelationWrites(t *testing.T) {
 	caio := must(orm.New[eUser](db).Find(ctx, 3))
 	br := must(orm.New[eCountry](db).Find(ctx, 1))
 	ok(t, caio.Country.Associate(br))
-	if !caio.IsDirty("country_id") || caio.Country.Value().Name != "BR" {
+	if !caio.IsDirty("country_id") || caio.Country.Item().Name != "BR" {
 		t.Fatalf("associate: %+v", caio)
 	}
 	ok(t, caio.Save(ctx))
@@ -760,7 +760,7 @@ func TestRelationDeclarationErrors(t *testing.T) {
 	}
 	type noMorph struct {
 		orm.BaseModel
-		Comments orm.MorphMany[eComment] `gorm:"-"`
+		Comments orm.MorphMany[eComment]
 	}
 	for name, run := range map[string]func() error{
 		"missing gorm tag": func() error { _, err := orm.New[noTag](db).Query().With("Posts").Get(ctx); return err },

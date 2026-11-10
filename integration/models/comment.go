@@ -9,6 +9,6 @@ type Comment struct {
 	CommentableID   uint
 	Body            string
 
-	User        orm.BelongsTo[User] `gorm:"-"`
-	Commentable orm.MorphTo         `gorm:"-" orm:"morph:commentable"`
+	User        orm.BelongsTo[User]
+	Commentable orm.MorphTo `orm:"morph:commentable"`
 }

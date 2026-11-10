@@ -6,6 +6,19 @@ description: Testing application code that uses migro.
 
 # Testing your code
 
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
+migro makes it simple to test code that touches the database: a throwaway database, migrations, and factories that build the data. This page is the equivalent of Laravel's *Database Testing*.
+
+## Creating a test database
+
 SQLite makes a fast test database. A file in `t.TempDir()` avoids the "each connection gets its own `:memory:` database" trap:
 
 ```go
@@ -17,9 +30,11 @@ func newTestDB(t *testing.T) *migro.DB {
 }
 ```
 
+## Migrating and seeding
+
 Run your migrations in the test with `migrate.New(db)` and use factories to build data. Because dialect SQL differs, also run the suite against your production database type in CI.
 
-## Testing with the whole pipeline
+### Testing with the whole pipeline
 
 To test against a realistic schema, register your migrations and seeders by importing their packages, then migrate and seed in the test:
 

@@ -9,6 +9,6 @@ type Country struct {
 	Code string
 	Name string
 
-	Users orm.HasMany[User]              `gorm:"-"`
-	Posts orm.HasManyThrough[Post, User] `gorm:"-"`
+	Users orm.HasMany[User]
+	Posts orm.HasManyThrough[Post, User]
 }

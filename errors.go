@@ -31,6 +31,7 @@ const (
 	MassAssignment     Code = "MASS_ASSIGNMENT"
 	UnboundModel       Code = "UNBOUND_MODEL"
 	RelationNotLoaded  Code = "RELATION_NOT_LOADED"
+	CastFailed         Code = "CAST_FAILED"
 )
 
 // Error is the single error type returned across migro boundaries.

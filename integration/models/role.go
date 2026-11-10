@@ -6,5 +6,5 @@ type Role struct {
 	orm.BaseModel
 	Name string
 
-	Users orm.BelongsToMany[User] `gorm:"-"`
+	Users orm.BelongsToMany[User]
 }

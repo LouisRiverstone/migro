@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"database/sql/driver"
 	"reflect"
 	"sort"
 	"strings"
@@ -11,18 +12,18 @@ import (
 	gschema "gorm.io/gorm/schema"
 )
 
-// Relations are declared as struct fields, like Lucid's decorators. The `gorm:"-"` tag is required
-// (GORM must not treat the field as a column) and the optional `orm:"..."` tag overrides the
-// Laravel-style conventions with column names:
+// `gorm:"-"` needed) and the optional `orm:"..."` tag overrides the Laravel-style conventions with
+//  needed) and the optional `orm:"..."` tag overrides the Laravel-style conventions with
+// column names:
 //
 //	type User struct {
 //	    orm.SoftDeleteModel
 //	    CountryID uint
-//	    Profile   orm.HasOne[Profile]        `gorm:"-"`
-//	    Posts     orm.HasMany[Post]          `gorm:"-"`
-//	    Country   orm.BelongsTo[Country]     `gorm:"-"`
-//	    Roles     orm.BelongsToMany[Role]    `gorm:"-" orm:"pivotTable:role_user"`
-//	    Comments  orm.MorphMany[Comment]     `gorm:"-" orm:"morph:commentable"`
+//	    Profile   orm.HasOne[Profile]
+//	    Posts     orm.HasMany[Post]
+//	    Country   orm.BelongsTo[Country]
+//	    Roles     orm.BelongsToMany[Role]    `orm:"pivotTable:role_user"`
+//	    Comments  orm.MorphMany[Comment]     `orm:"morph:commentable"`
 //	}
 //
 // Tag keys: foreignKey, localKey, relatedKey, pivotTable, pivotForeignKey, pivotRelatedForeignKey,
@@ -92,16 +93,20 @@ func (m *relMeta) Load(ctx context.Context) error {
 }
 
 type many[T any] struct {
-	relMeta
-	items []T
+	relMeta `gorm:"-"`
+	items   Collection[T]
 }
 
+// Value hides the relation from GORM; see one.Value.
+func (m *many[T]) Value() (driver.Value, error) { return nil, nil }
+
 // Items returns the loaded rows (empty until loaded; see Loaded).
-func (m *many[T]) Items() []T { return m.items }
+func (m *many[T]) Items() Collection[T] { return m.items }
 
 func (m *many[T]) modelType() reflect.Type { return reflect.TypeFor[T]() }
 func (m *many[T]) store(rows reflect.Value) {
-	m.items, _ = rows.Interface().([]T)
+	items, _ := rows.Interface().([]T)
+	m.items = items
 	m.loaded = true
 }
 func (m *many[T]) children() []reflect.Value {
@@ -113,7 +118,7 @@ func (m *many[T]) children() []reflect.Value {
 }
 
 // Get returns the related rows, loading them on first use.
-func (m *many[T]) Get(ctx context.Context) ([]T, error) {
+func (m *many[T]) Get(ctx context.Context) (Collection[T], error) {
 	if err := m.Load(ctx); err != nil {
 		return nil, err
 	}
@@ -124,12 +129,17 @@ func (m *many[T]) Get(ctx context.Context) ([]T, error) {
 func (m *many[T]) Query() (*Query[T], error) { return relatedQuery[T](&m.relMeta) }
 
 type one[T any] struct {
-	relMeta
-	item *T
+	relMeta `gorm:"-"`
+	item    *T
 }
 
-// Value returns the loaded row, or nil.
-func (o *one[T]) Value() *T { return o.item }
+// Item returns the loaded row, or nil.
+func (o *one[T]) Item() *T { return o.item }
+
+// Value makes the relation a driver.Valuer that always yields nil. GORM then merges the `gorm`
+// tags of the relation's inner fields into the field's own settings, and the  on those
+// inner fields hides the relation from GORM without the user tagging every field.
+func (o *one[T]) Value() (driver.Value, error) { return nil, nil }
 
 func (o *one[T]) modelType() reflect.Type { return reflect.TypeFor[T]() }
 func (o *one[T]) store(rows reflect.Value) {
@@ -181,15 +191,18 @@ func (*HasManyThrough[T, Through]) kind() kind                { return kThrough 
 func (*HasManyThrough[T, Through]) throughType() reflect.Type { return reflect.TypeFor[Through]() }
 
 // MorphTo is the inverse of MorphOne/MorphMany: the owner holds <name>_type and <name>_id, and the
-// target is any model registered with MorphMap. Value is a pointer to that model.
+// target is any model registered with MorphMap. Item is a pointer to that model.
 type MorphTo struct {
-	relMeta
-	item any
+	relMeta `gorm:"-"`
+	item    any
 }
 
 func (*MorphTo) kind() kind              { return kMorphTo }
 func (*MorphTo) modelType() reflect.Type { return nil }
-func (m *MorphTo) Value() any            { return m.item }
+func (m *MorphTo) Item() any             { return m.item }
+
+// Value hides the relation from GORM; see one.Value.
+func (m *MorphTo) Value() (driver.Value, error) { return nil, nil }
 func (m *MorphTo) store(rows reflect.Value) {
 	m.item = nil
 	if rows.Len() > 0 {
@@ -312,9 +325,6 @@ func resolveByName(db *migro.DB, ownerT reflect.Type, name string) (*relDef, rel
 	rf, ok := reflect.New(sf.Type).Interface().(relField)
 	if !ok {
 		return nil, nil, migro.Newf(migro.InvalidSchema, "%s.%s is not a relation field", ownerT.Name(), name)
-	}
-	if !strings.Contains(sf.Tag.Get("gorm"), "-") {
-		return nil, nil, migro.Newf(migro.InvalidSchema, "%s.%s needs the `gorm:\"-\"` tag", ownerT.Name(), name)
 	}
 	d, err := resolve(db, ownerT, sf, rf)
 	return d, rf, err

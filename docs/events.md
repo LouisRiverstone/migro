@@ -6,6 +6,19 @@ description: Event bus and model lifecycle events.
 
 # Events
 
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
+migro events let you hook into the lifecycle of a model — creating, updating, deleting — and emit your own. They are the counterpart of Eloquent's model events and observers.
+
+## Registering listeners
+
 ```go
 bus := events.New()
 if err := bus.Attach(db); err != nil { ... }
@@ -27,7 +40,11 @@ err := bus.Emit(ctx, events.Event{Name: "user:welcomed", Payload: u})
 bus.EmitAsync(ctx, ev, func(err error) { log.Println(err) }); bus.Wait()
 ```
 
+## Available events
+
 Names: `before:create`, `after:create`, `before:update`, `after:update`, `before:save`, `after:save` (create or update), `before:delete`, `after:delete`, `after:find`.
+
+## Behavior
 
 - `Emit` returns `EVENT_ABORTED` on the first `before:*` error and stops. For other events every handler runs and failures are combined into `EVENT_HANDLER_FAILED`. A handler panic becomes an error.
 - Handlers run inside the operation's transaction, so an abort rolls the write back.
