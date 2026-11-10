@@ -7,7 +7,7 @@ type Category struct {
 	ParentID *uint
 	Name     string
 
-	Parent   orm.BelongsTo[Category] `gorm:"-" orm:"foreignKey:parent_id"`
-	Children orm.HasMany[Category]   `gorm:"-" orm:"foreignKey:parent_id"`
-	Posts    orm.HasMany[Post]       `gorm:"-"`
+	Parent   orm.BelongsTo[Category] `orm:"foreignKey:parent_id"`
+	Children orm.HasMany[Category]   `orm:"foreignKey:parent_id"`
+	Posts    orm.HasMany[Post]
 }

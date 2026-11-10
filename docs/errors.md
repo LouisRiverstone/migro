@@ -6,6 +6,15 @@ description: Stable error codes and how to match them.
 
 # Errors
 
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
 Every failure is a `*migro.Error` with a stable `Code`.
 
 ```go
@@ -21,6 +30,8 @@ code := migro.CodeOf(err) // "" when err is not a migro error
 ```
 
 `errors.Is` matches by code, so the sentinels `ErrNotFound`, `ErrMigrationLocked`, `ErrUnsupportedFeature`, `ErrPoolAcquireTimeout` and `ErrEventAborted` work through wrapped errors.
+
+## Error codes
 
 | Code | Meaning |
 |---|---|
@@ -39,3 +50,4 @@ code := migro.CodeOf(err) // "" when err is not a migro error
 | `DIFF_FAILED` | Schema diff failure |
 | `SHARD_NOT_FOUND` / `SHARD_FAILED` | Cluster routing or fan-out |
 | `UNKNOWN_MORPH_TYPE` | Polymorphic type not registered |
+| `CAST_FAILED` | A [cast](mutators-casting.md) rejected a value (bad date, value outside an enum, wrong key) |

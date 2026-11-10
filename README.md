@@ -51,7 +51,7 @@ func (CreatePostsTable) Up(ctx context.Context, s *schema.Builder) error {
 }
 ```
 
-Declare models with typed relations (tag them `gorm:"-"`; names follow Laravel's conventions):
+Declare models with typed relations (names follow Laravel's conventions):
 
 ```go
 type Post struct {
@@ -59,9 +59,9 @@ type Post struct {
 	UserID uint
 	Title  string
 
-	Author   orm.BelongsTo[User]    `gorm:"-" orm:"foreignKey:user_id"`
-	Comments orm.MorphMany[Comment] `gorm:"-" orm:"morph:commentable"`
-	Tags     orm.MorphToMany[Tag]   `gorm:"-" orm:"morph:taggable"`
+	Author   orm.BelongsTo[User] `orm:"foreignKey:user_id"`
+	Comments orm.MorphMany[Comment] `orm:"morph:commentable"`
+	Tags     orm.MorphToMany[Tag] `orm:"morph:taggable"`
 }
 
 func (Post) Fillable() []string { return []string{"user_id", "title"} }   // mass-assignment allow-list
@@ -115,6 +115,7 @@ migro migration:fresh --seed        # rebuild the database and seed it
 
 - **Schema builder** and **query builder** in the style of Knex
 - **Models** in the style of Eloquent and Lucid: instance API (`Save`, `Delete`, `Restore`, `Refresh`), dirty tracking, mass assignment, `Hidden`/`Appends` serialization, aggregates and `Chunk`
+- **Scopes, casts, resources and collections**: local and global query scopes, hashed/encrypted/enum/date/JSON casts, API resources with pagination, and `Collection[T]` helpers (`Filter`, `KeyBy`, `GroupBy`, `Load`, `Fresh`)
 - **Relations** as typed fields: has-one/many, belongs-to, many-to-many with pivot writes, `hasManyThrough`, and the polymorphic family (`MorphTo`, `MorphMany`, `MorphToMany`, ...), with `With`, `WithCount`, `Has`/`WhereHas` and lazy loading
 - **Migrations** like Laravel: timestamped files, batches, locking, `--pretend`, `migration:diff`
 - **Seeders and factories** like Laravel/Lucid: `DatabaseSeeder` with `seed.Call`, `--class`, `--once`, states, sequences, `For`/`With`, `UpdateOrCreateMany` and a built-in faker

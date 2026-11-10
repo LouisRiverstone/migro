@@ -26,6 +26,10 @@ migro db:seed
 | [Query builder](query-builder.md) | Knex-style `query.Table(db, "users").Where(...).Get(ctx)` for tables without a model |
 | [Models](models.md) | Eloquent and Lucid style: `orm.New[User](db)`, instance `Save`/`Delete`, dirty tracking, mass assignment, serialization, aggregates |
 | [Relations](relations.md) | Typed relation fields (`HasMany[Post]`, `BelongsToMany[Role]`, `MorphTo`, ...), `With`/`WithCount`/`Has`, pivot `Attach`/`Sync`, morph map |
+| [Query scopes](query-scopes.md) | Reusable `Apply(Published, By(1))` local scopes and model-level global scopes |
+| [Mutators and casting](mutators-casting.md) | Hashed, encrypted, enum, date and typed JSON columns; custom mutators and accessors |
+| [Serialization](serialization.md) and [Resources](resources.md) | `ToMap`/`JSON` with `MakeVisible`/`DateFormat`, and hand-shaped API resources with pagination |
+| [Collections](collections.md) | `Filter`, `KeyBy`, `GroupBy`, `Load`, `Fresh` on every multi-row result |
 | [Migrations](migrations.md) | Files like `20260101120000_create_users_table.go` with `Up` and `Down`, batches, locking, `--pretend` |
 | [Command line](command-line.md) | `make:*`, `migration:*`, `db:seed`, production prompt, several connections |
 | [Seeders and factories](seeding.md) | Lucid-style factories with states and relations, environment-aware seeders |

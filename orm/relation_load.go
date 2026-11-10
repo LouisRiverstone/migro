@@ -61,6 +61,9 @@ func keysOf(ctx context.Context, d *relDef, owners []reflect.Value, col string) 
 
 func relQuery(ctx context.Context, db *migro.DB, t reflect.Type, scope scopeFn) *gorm.DB {
 	g := db.Gorm.WithContext(ctx).Model(reflect.New(t).Interface())
+	if scopes := globalScopesOf(t); len(scopes) > 0 {
+		g = g.Scopes(scopeFunc(scopes, &skipSet{}))
+	}
 	if scope != nil {
 		g = scope(g)
 	}
@@ -471,7 +474,11 @@ func relatedQuery[T any](m *relMeta) (*Query[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Query[T]{db: m.db, g: g}, nil
+	q := &Query[T]{db: m.db, g: g, skip: &skipSet{}}
+	if scopes := globalScopesOf(reflect.TypeFor[T]()); len(scopes) > 0 {
+		q.g = q.g.Scopes(scopeFunc(scopes, q.skip))
+	}
+	return q, nil
 }
 
 // existsCond returns the owner column and a subquery of the owner keys that have a related row.

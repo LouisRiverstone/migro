@@ -8,7 +8,7 @@ type Video struct {
 	Title   string
 	Seconds int
 
-	User     orm.BelongsTo[User]    `gorm:"-"`
-	Comments orm.MorphMany[Comment] `gorm:"-" orm:"morph:commentable"`
-	Tags     orm.MorphToMany[Tag]   `gorm:"-" orm:"morph:taggable"`
+	User     orm.BelongsTo[User]
+	Comments orm.MorphMany[Comment] `orm:"morph:commentable"`
+	Tags     orm.MorphToMany[Tag]   `orm:"morph:taggable"`
 }

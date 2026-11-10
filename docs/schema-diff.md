@@ -6,6 +6,19 @@ description: Generate migrations from the differences between models and the dat
 
 # Schema diff
 
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
+Schema diff is the reverse of writing a migration by hand: you change your models and migro writes the migration. It resembles what Prisma and Django do with `makemigrations`.
+
+## Generating a migration
+
 `migro migration:diff [name]` compares your GORM models with the live database and writes the difference as a new Go migration file. It treats every exported struct in `app/models` (`MIGRO_MODELS_DIR`) as a model; add `// migro:ignore` to a type's doc comment to skip it.
 
 ```
@@ -28,6 +41,10 @@ path, err := plan.WriteGoFile("database/migrations", "migrations", "sync_models"
 paths, err := plan.WriteFiles("migrations", "sync_models")                                     // or .up.sql / .down.sql files
 ```
 
+## What it detects
+
 What it detects: new tables, added/dropped/renamed columns, added/dropped indexes. Drops are listed in `plan.Blocked` and only written when `Options{AllowDestructive: true}`. It never drops tables.
+
+## Limitations
 
 What it does not do: detect column type or nullability changes (some are reported as warnings), or translate default expressions (reported as warnings). The `down` file for a dropped column is a comment, because the data cannot be restored. **Always read the generated SQL before applying it.**

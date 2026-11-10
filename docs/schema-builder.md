@@ -6,7 +6,18 @@ description: Knex-style table builder: columns, indexes, foreign keys, relations
 
 # Schema builder
 
-Knex-style DDL, compiled per database.
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
+The schema builder provides a database-agnostic way of creating and modifying tables, in the style of Knex and Laravel's `Schema` facade. It is compiled per database, so one definition works on every supported dialect. You will normally use it inside [migrations](migrations.md).
+
+## Creating tables
 
 ```go
 s := schema.New(db)
@@ -32,11 +43,17 @@ err = s.CreateTable(ctx, "posts", func(t *schema.Table) {
 })
 ```
 
-**Column types:** `Increments`, `BigIncrements`, `String(name, length?)`, `Text`, `SmallInteger`, `Integer`, `BigInteger`, `Boolean`, `Float`, `Double`, `Decimal(name, precision, scale)`, `Date`, `Time`, `DateTime`, `Timestamp`, `JSON`, `UUID`, `Binary`, `Enum`.
+## Available column types
 
-**Column modifiers:** `NotNull()`, `Nullable()`, `Default(v)`, `DefaultRaw(sql)`, `DefaultNow()`, `Unsigned()` (MySQL only; ignored elsewhere), `Primary()`, `Unique()`, `Index()`.
+Available types: `Increments`, `BigIncrements`, `String(name, length?)`, `Text`, `SmallInteger`, `Integer`, `BigInteger`, `Boolean`, `Float`, `Double`, `Decimal(name, precision, scale)`, `Date`, `Time`, `DateTime`, `Timestamp`, `JSON`, `UUID`, `Binary`, `Enum`.
 
-**Relations (Lucid / Laravel style):**
+## Column modifiers
+
+Modifiers chain onto a column: `NotNull()`, `Nullable()`, `Default(v)`, `DefaultRaw(sql)`, `DefaultNow()`, `Unsigned()` (MySQL only; ignored elsewhere), `Primary()`, `Unique()`, `Index()`.
+
+## Foreign key constraints
+
+Laravel-style helpers create the column and its constraint together:
 
 ```go
 t.ForeignID("user_id").Constrained().OnDelete("CASCADE")          // bigint unsigned NOT NULL -> users(id); table inferred from the name
@@ -47,11 +64,15 @@ t.Morphs("commentable")            // commentable_type + commentable_id (+ compo
 
 `ForeignID` pairs with `BigIncrements`; if the referenced key is `Increments` (int), use `Integer(...).Unsigned().References(...)` so the types match.
 
-**Table-level:** `Primary(cols...)` for composite keys, `Unique(cols...)`, `Index(cols...)` (both accept `.Named("x")`), `Foreign(cols...).References(table, cols...).OnDelete(...).OnUpdate(...)`.
+## Indexes
+
+Table-level definitions: `Primary(cols...)` for composite keys, `Unique(cols...)`, `Index(cols...)` (both accept `.Named("x")`), `Foreign(cols...).References(table, cols...).OnDelete(...).OnUpdate(...)`.
+
+### Naming and nullability
 
 Columns are nullable by default, as in Knex. Names for indexes and constraints are generated (`users_email_unique`, `posts_user_id_foreign`) and shortened with a hash if they exceed 63 characters.
 
-## Altering tables
+## Updating tables
 
 ```go
 err = s.AlterTable(ctx, "users", func(t *schema.Table) {
@@ -72,7 +93,7 @@ s.Raw(ctx, "CREATE EXTENSION IF NOT EXISTS pgcrypto")
 
 Changing a column's type is not supported; use `Raw` for that.
 
-## Inspect the SQL without running it
+### Inspecting the SQL without running it
 
 ```go
 stmts, err := schema.CreateSQL(db.Dialect, "users", func(t *schema.Table) { t.Increments("id") })

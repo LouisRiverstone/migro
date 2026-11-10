@@ -6,6 +6,17 @@ description: Connection pool options, read replicas and key-based sharding.
 
 # Pool, replicas, sharding
 
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
+Beyond a single connection, migro can tune the connection pool, spread reads across replicas (Laravel's *read and write connections*) and route rows to several databases by key (sharding).
+
 ## Pool
 
 ```go

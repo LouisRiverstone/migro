@@ -3,6 +3,7 @@ package orm_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/LouisRiverstone/migro"
@@ -10,6 +11,7 @@ import (
 	"github.com/LouisRiverstone/migro/orm"
 	"github.com/LouisRiverstone/migro/schema"
 	"gorm.io/gorm"
+	gschema "gorm.io/gorm/schema"
 )
 
 type Country struct {
@@ -212,5 +214,23 @@ func TestMorphToManyAndInverse(t *testing.T) {
 	}
 	if err := (orm.MorphToManyLoader[Tag]{}).Attach(ctx, db, 1, 1); !errors.Is(err, migro.Newf(migro.InvalidSchema, "")) {
 		t.Fatalf("empty pivot should fail: %v", err)
+	}
+}
+
+// Relation fields hide themselves from GORM: no `gorm:"-"` tag on the model.
+func TestRelationFieldsAreInvisibleToGorm(t *testing.T) {
+	type tagless struct {
+		ID       uint `gorm:"primaryKey"`
+		Post     orm.BelongsTo[Country]
+		Posts    orm.HasMany[Country]
+		Comments orm.MorphMany[Country] `orm:"morph:commentable"`
+		Target   orm.MorphTo            `orm:"morph:target"`
+	}
+	sch, err := gschema.Parse(&tagless{}, &sync.Map{}, gschema.NamingStrategy{})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(sch.DBNames) != 1 || sch.DBNames[0] != "id" {
+		t.Fatalf("columns = %v, want [id]", sch.DBNames)
 	}
 }

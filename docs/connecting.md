@@ -6,6 +6,19 @@ description: Open a database with migro.Open, DSN formats per database.
 
 # Connecting
 
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
+Almost every application talks to a database. migro opens it with `migro.Open`, which returns a `*migro.DB` that every other layer (schema, query builder, models, migrations, seeders) accepts. It wraps a `*gorm.DB`, so anything GORM can do is still available.
+
+## Configuration
+
 Import the dialect packages you need. Each registers itself, so unused drivers are not compiled in.
 
 ```go
@@ -30,6 +43,14 @@ defer db.Close()
 | `sqlserver` | `dialect/sqlserver` | `sqlserver://user:pass@localhost:1433?database=app` |
 | `oracle` | `dialect/oracle` | `oracle://user:pass@host:1521/service_name` |
 
+### Supported databases
+
+The table above lists each dialect, the package to import and a sample DSN.
+
+### Using GORM directly
+
 `db.Gorm` is the underlying `*gorm.DB` and `db.Dialect` the dialect, so anything GORM can do is still available. `migro.Open` uses a silent GORM logger unless you pass your own `Config.Gorm`.
+
+### Adopting an existing connection
 
 To adopt a `*gorm.DB` you already have: `migro.Adopt(gormDB, dialect)`.

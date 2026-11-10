@@ -6,7 +6,18 @@ description: Laravel and Lucid style seeders, DatabaseSeeder, factories.
 
 # Seeders and factories
 
-## Factories
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Introduction
+
+migro can seed your database with test or default data using seed classes. Factories generate realistic models for tests and seeders. Both mirror Laravel's *Database: Seeding* and *Eloquent: Factories*.
+
+## Defining model factories
 
 ```go
 users := seed.Define(func(f *seed.Faker) User {
@@ -25,6 +36,8 @@ list, err := users.CreateMany(ctx, db, 10)                         // saved; all
 admin, err := users.Apply("admin").With("posts", 3).Create(ctx, db)
 fixed, err := users.Merge(func(u *User) { u.Name = "Fixed" }).Seed(42).Make() // reproducible
 ```
+
+### Factory states, sequences and parents
 
 More Laravel-style helpers:
 
@@ -50,7 +63,7 @@ Models returned by `Create` / `CreateMany` are bound to the database, so `user.P
 
 The faker is deterministic for a given seed. It offers `Name`, `FirstName`, `LastName`, `Email` (reserved `example.*` domains), `Username`, `Word`, `Words`, `Sentence`, `Paragraph`, `Int`, `Float`, `Bool`, `Pick`, `UUID` and `Date`.
 
-## Seeders
+## Writing seeders
 
 A seeder is a type with a `Run` method, registered like a migration. `migro make:seeder User` creates it:
 
@@ -89,6 +102,8 @@ func (DatabaseSeeder) Run(ctx context.Context, db *migro.DB) error {
 ```
 
 `seed.Call` stops at the first error and names the seeder that failed. Because the whole `DatabaseSeeder` runs in one transaction, a failure in the third seeder rolls back the first two.
+
+### Running seeders
 
 ```
 migro db:seed                      # DatabaseSeeder if registered, otherwise every seeder by name

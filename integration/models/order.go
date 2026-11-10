@@ -13,8 +13,8 @@ type Order struct {
 	Total    float64
 	PlacedAt *time.Time
 
-	User  orm.BelongsTo[User]    `gorm:"-"`
-	Items orm.HasMany[OrderItem] `gorm:"-"`
+	User  orm.BelongsTo[User]
+	Items orm.HasMany[OrderItem]
 }
 
 // OrderItem has a composite primary key (order_id, line_no), so it does not embed BaseModel;
@@ -26,6 +26,6 @@ type OrderItem struct {
 	Quantity  int
 	UnitPrice float64
 
-	Order   orm.BelongsTo[Order]   `gorm:"-"`
-	Product orm.BelongsTo[Product] `gorm:"-"`
+	Order   orm.BelongsTo[Order]
+	Product orm.BelongsTo[Product]
 }

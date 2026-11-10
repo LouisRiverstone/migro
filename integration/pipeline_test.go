@@ -126,7 +126,7 @@ func TestMigrationsBuildTheWholeSchema(t *testing.T) {
 		}
 	}
 	st, err := m.Status(ctx)
-	if err != nil || len(st) != 16 {
+	if err != nil || len(st) != 17 {
 		t.Fatalf("status: %+v %v", st, err)
 	}
 	for _, s := range st {
@@ -304,16 +304,16 @@ func TestEagerRelationsOnTheSeededDatabase(t *testing.T) {
 		users := must(orm.New[User](db).Query().
 			With("Country").With("Profile").With("Roles").With("Orders").OrderBy("id", "asc").Get(ctx))
 		ana, bia, caio := users[0], users[1], users[2]
-		if ana.Country.Value().Code != "BR" || caio.Country.Value().Code != "PT" {
-			t.Errorf("countries: %+v %+v", ana.Country.Value(), caio.Country.Value())
+		if ana.Country.Item().Code != "BR" || caio.Country.Item().Code != "PT" {
+			t.Errorf("countries: %+v %+v", ana.Country.Item(), caio.Country.Item())
 		}
-		if p := ana.Profile.Value(); p == nil || p.Bio == nil || *p.Bio != "Writes; a lot" {
+		if p := ana.Profile.Item(); p == nil || p.Bio == nil || *p.Bio != "Writes; a lot" {
 			t.Errorf("ana's profile: %+v", p)
 		}
-		if p := bia.Profile.Value(); p == nil || p.Bio != nil {
+		if p := bia.Profile.Item(); p == nil || p.Bio != nil {
 			t.Errorf("bia's profile has a NULL bio: %+v", p)
 		}
-		if caio.Profile.Value() != nil || !caio.Profile.Loaded() {
+		if caio.Profile.Item() != nil || !caio.Profile.Loaded() {
 			t.Errorf("caio has no profile")
 		}
 		if len(ana.Roles.Items()) != 2 || len(bia.Roles.Items()) != 1 || caio.Roles.Items()[0].Name != "reader" {
@@ -326,13 +326,13 @@ func TestEagerRelationsOnTheSeededDatabase(t *testing.T) {
 
 	t.Run("nested through a composite-key model", func(t *testing.T) {
 		orders := must(orm.New[Order](db).Query().With("Items.Product").With("User").OrderBy("id", "asc").Get(ctx))
-		if len(orders) != 2 || len(orders[0].Items.Items()) != 2 || orders[0].User.Value().Name != "Ana" {
+		if len(orders) != 2 || len(orders[0].Items.Items()) != 2 || orders[0].User.Item().Name != "Ana" {
 			t.Fatalf("orders: %+v", orders)
 		}
 		var sum float64
 		for _, it := range orders[0].Items.Items() {
 			sum += float64(it.Quantity) * it.UnitPrice
-			if it.Product.Value() == nil || it.Product.Value().SKU == "" {
+			if it.Product.Item() == nil || it.Product.Item().SKU == "" {
 				t.Errorf("line %d lost its product", it.LineNo)
 			}
 		}
@@ -352,9 +352,9 @@ func TestEagerRelationsOnTheSeededDatabase(t *testing.T) {
 			t.Fatalf("down the tree: %+v", root)
 		}
 		leaf := must(orm.New[Category](db).Query().Where("name = ?", "Migrations").With("Parent.Parent").First(ctx))
-		if leaf.Parent.Value().Name != "Databases" || leaf.Parent.Value().Parent.Value().Name != "Tech" ||
-			leaf.Parent.Value().Parent.Value().Parent.Value() != nil {
-			t.Fatalf("up the tree: %+v", leaf.Parent.Value())
+		if leaf.Parent.Item().Name != "Databases" || leaf.Parent.Item().Parent.Item().Name != "Tech" ||
+			leaf.Parent.Item().Parent.Item().Parent.Item() != nil {
+			t.Fatalf("up the tree: %+v", leaf.Parent.Item())
 		}
 	})
 
@@ -367,18 +367,18 @@ func TestEagerRelationsOnTheSeededDatabase(t *testing.T) {
 
 	t.Run("polymorphic: morphTo, morphMany", func(t *testing.T) {
 		comments := must(orm.New[Comment](db).Query().With("Commentable").With("User").OrderBy("id", "asc").Get(ctx))
-		if p, isPost := comments[0].Commentable.Value().(*Post); !isPost || p.Slug != "hello-db" || !p.Exists() {
-			t.Errorf("comment 1 -> %+v", comments[0].Commentable.Value())
+		if p, isPost := comments[0].Commentable.Item().(*Post); !isPost || p.Slug != "hello-db" || !p.Exists() {
+			t.Errorf("comment 1 -> %+v", comments[0].Commentable.Item())
 		}
-		if v, isVideo := comments[2].Commentable.Value().(*Video); !isVideo || v.Title != "Intro to indexes" {
-			t.Errorf("comment 3 -> %+v", comments[2].Commentable.Value())
+		if v, isVideo := comments[2].Commentable.Item().(*Video); !isVideo || v.Title != "Intro to indexes" {
+			t.Errorf("comment 3 -> %+v", comments[2].Commentable.Item())
 		}
 		// post 3 and video 1 share ids with other types: the type column keeps them apart
-		if p, isPost := comments[3].Commentable.Value().(*Post); !isPost || p.Slug != "draft" {
-			t.Errorf("comment 4 -> %+v", comments[3].Commentable.Value())
+		if p, isPost := comments[3].Commentable.Item().(*Post); !isPost || p.Slug != "draft" {
+			t.Errorf("comment 4 -> %+v", comments[3].Commentable.Item())
 		}
-		if comments[1].User.Value().Name != "Caio" {
-			t.Errorf("comment author: %+v", comments[1].User.Value())
+		if comments[1].User.Item().Name != "Caio" {
+			t.Errorf("comment author: %+v", comments[1].User.Item())
 		}
 		posts := must(orm.New[Post](db).Query().With("Comments").OrderBy("id", "asc").Get(ctx))
 		if len(posts[0].Comments.Items()) != 2 || len(posts[1].Comments.Items()) != 0 || len(posts[2].Comments.Items()) != 1 {
@@ -649,7 +649,7 @@ func TestPretendRendersEveryMigrationWithoutTouchingTheDatabase(t *testing.T) {
 	m := migrator(t, db)
 
 	res, err := m.Run(ctx, migrate.RunOptions{Pretend: true})
-	if err != nil || len(res.Names) != 16 {
+	if err != nil || len(res.Names) != 17 {
 		t.Fatalf("pretend: %+v %v", res, err)
 	}
 	var all []string
@@ -678,11 +678,11 @@ func TestRollbackUnwindsInForeignKeyOrder(t *testing.T) {
 	db := seeded(t) // data present: down migrations must cope with populated tables
 	m := migrator(t, db)
 
-	rb, err := m.RollbackSteps(ctx, 5)
+	rb, err := m.RollbackSteps(ctx, 6)
 	if err != nil {
 		t.Fatalf("rollback with data present: %v", err)
 	}
-	want := []string{"add_reporting_indexes", "add_phone_to_users_table", "create_order_items_table", "create_orders_table", "create_products_table"}
+	want := []string{"add_model_feature_columns", "add_reporting_indexes", "add_phone_to_users_table", "create_order_items_table", "create_orders_table", "create_products_table"}
 	if len(rb.Names) != len(want) {
 		t.Fatalf("rolled back: %v", rb.Names)
 	}
@@ -718,7 +718,7 @@ func TestResetAndFreshRoundTrip(t *testing.T) {
 
 	// every migration must be reversible: after Reset only the bookkeeping tables remain
 	res, err := m.Reset(ctx)
-	if err != nil || len(res.Names) != 16 {
+	if err != nil || len(res.Names) != 17 {
 		t.Fatalf("reset: %+v %v", res, err)
 	}
 	tables, err := db.Gorm.Migrator().GetTables()

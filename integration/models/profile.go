@@ -7,5 +7,5 @@ type Profile struct {
 	UserID uint
 	Bio    *string
 
-	User orm.BelongsTo[User] `gorm:"-"`
+	User orm.BelongsTo[User]
 }
