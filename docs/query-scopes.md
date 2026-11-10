@@ -82,6 +82,7 @@ A global scope is a constraint every query on the model gets without asking. Typ
 
 Implement `GlobalScopes` on the model. Each scope has a name and a function over `*gorm.DB`:
 
+{% raw %}
 ```go
 func (Post) GlobalScopes() []orm.NamedScope {
     return []orm.NamedScope{{
@@ -90,6 +91,7 @@ func (Post) GlobalScopes() []orm.NamedScope {
     }}
 }
 ```
+{% endraw %}
 
 From then on an archived post does not exist as far as the repository is concerned:
 

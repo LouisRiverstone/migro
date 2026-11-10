@@ -1,7 +1,7 @@
 ---
 title: How it works
 nav_order: 4
-description: The mental model behind migro: layers, dialects, migrations and what the command line does.
+description: "The mental model behind migro: layers, dialects, migrations and what the command line does."
 ---
 
 # How it works
