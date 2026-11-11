@@ -469,3 +469,106 @@ byCountry, err := rel.Load(ctx, db, []any{1, 2, 3})        // map[any][]Story
 ```
 
 Very large key lists are not chunked; split them if your database caps the size of an `IN` list. Composite keys are not supported in relations.
+
+## Has one through
+
+`HasOneThrough[T, Through]` reaches a single `T` through an intermediate model, with the same keys as `HasManyThrough`:
+
+```go
+type Mechanic struct {
+    orm.BaseModel
+    Car   orm.HasOne[Car]
+    Owner orm.HasOneThrough[Owner, Car] `orm:"foreignKey:mechanic_id;throughForeignKey:car_id"`
+}
+```
+
+It serializes as an object (or `null`), not an array.
+
+## Choosing one of many
+
+A `HasOne` or `MorphOne` can pick a single row out of a larger set by tagging it with `ofMany`:
+
+```go
+type User struct {
+    orm.BaseModel
+    LatestOrder   orm.HasOne[Order] `orm:"foreignKey:user_id;ofMany:latest"`
+    FirstOrder    orm.HasOne[Order] `orm:"foreignKey:user_id;ofMany:oldest"`
+    BiggestOrder  orm.HasOne[Order] `orm:"foreignKey:user_id;ofMany:max:total"`
+    CheapestOrder orm.HasOne[Order] `orm:"foreignKey:user_id;ofMany:min:total"`
+}
+```
+
+`latest` and `oldest` compare the primary key, or the column you add (`ofMany:latest:created_at`). `max:col` and `min:col` compare that column. Eager loading stays one query for all owners; ties pick an arbitrary row.
+
+## Default models
+
+Tag a single relation `withDefault` and a missing row answers with an empty, unsaved model instead of `nil` (Eloquent's `withDefault`):
+
+```go
+Author orm.BelongsTo[User] `orm:"foreignKey:author_id;withDefault"`
+
+post.Author.Item().Name   // "" rather than a nil dereference
+post.Author.Item().Exists() // false
+```
+
+The default appears once the relation has been loaded, and is left out of `ToMap` and JSON.
+
+## Constraining the pivot
+
+Two more keys on many-to-many fields:
+
+| Key | Meaning |
+|---|---|
+| `pivotWhere` | `col=value` pairs, comma separated. Every read honours them (loading, counts, `Has`, the relation query), and `Attach` stores them. |
+| `pivotAs` | Prefix for pivot values in `Extras`. Default `pivot`, so `pivot_assigned_by`. |
+
+```go
+Approvals orm.BelongsToMany[Role] `orm:"pivotTable:role_user;pivotColumns:status;pivotWhere:status=approved;pivotAs:link"`
+// role.Extra("link_status") == "approved"
+```
+
+`Sync` and `Detach` only touch pivot rows that match `pivotWhere`, so another relation over the same pivot table keeps its rows. A custom pivot model (`Using`) is not supported.
+
+## Pivot models
+
+When the pivot rows have a key or hooks of their own, declare the pivot struct (Eloquent's `using`):
+
+```go
+type RoleUser struct {
+    orm.UUIDKey
+    UserID uint
+    RoleID uint
+    Level  string `gorm:"default:read"`
+}
+
+func (User) PivotModels() map[string]any { return map[string]any{"Roles": RoleUser{}} }
+```
+
+`Attach`, `AttachWith`, `Sync` and `Toggle` then create each row through that struct, so its `BeforeCreate` hooks run, a UUID key is generated and column defaults apply. The struct must have a column for both pivot keys and for every attribute you pass. Reads and `Detach` are unchanged.
+
+## Touching parents
+
+List belongs-to relations in `Touches` and the parent's `updated_at` moves whenever the child is created, saved, deleted or restored through the repository or the instance methods:
+
+```go
+func (Comment) Touches() []string { return []string{"Post"} }
+```
+
+Bulk query updates do not touch, as in Eloquent. The touch cascades: when the touched parent declares its own `Touches`, its parent is touched too (comment → post → blog). Each parent is touched once per save, so a cycle ends.
+
+## Saving several, and pushing
+
+```go
+err := user.Posts.SaveMany(ctx, []Post{ {Title: "a"}, {Title: "b"} })   // links and saves each, in one transaction
+err = orm.Push(ctx, user)                                              // saves user and every loaded relation
+```
+
+`Push` saves loaded belongs-to parents first and copies their key onto the model, saves the model, then links and saves the loaded children, all in one transaction.
+
+## Enforcing the morph map
+
+Without a map, a polymorphic model stores its Go type name in `*_type` columns, and renaming the type later orphans every row. `orm.EnforceMorphMap` is `MorphMap` that also refuses models missing from the map, with `UNKNOWN_MORPH_TYPE`:
+
+```go
+orm.EnforceMorphMap(map[string]any{"post": Post{}, "video": Video{}})
+```

@@ -103,3 +103,26 @@ func (d *myDialect) NativeEnum() bool          { return true }
 
 // MySQL implicitly commits DDL.
 func (d *myDialect) TransactionalDDL() bool { return false }
+
+func (d *myDialect) LockSQL(mode dialect.LockMode) string {
+	if mode == dialect.LockShare {
+		return "LOCK IN SHARE MODE" // MariaDB has no FOR SHARE
+	}
+	return "FOR UPDATE"
+}
+
+func (d *myDialect) JSONExtract(col string, path []string) string {
+	return "JSON_UNQUOTE(JSON_EXTRACT(" + col + ", '" + dialect.JSONPathString(path) + "'))"
+}
+
+func (d *myDialect) FullTextMatch(cols []string, boolean bool) string {
+	mode := "NATURAL LANGUAGE"
+	if boolean {
+		mode = "BOOLEAN"
+	}
+	return "MATCH (" + strings.Join(cols, ", ") + ") AGAINST (? IN " + mode + " MODE)"
+}
+
+func (d *myDialect) FullTextIndex(table, name string, cols []string) string {
+	return "CREATE FULLTEXT INDEX " + name + " ON " + table + " (" + strings.Join(cols, ", ") + ")"
+}

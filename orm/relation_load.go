@@ -176,6 +176,10 @@ func (d *relDef) eager(ctx context.Context, db *migro.DB, owners []reflect.Value
 			if d.typeCol != "" {
 				g = g.Where(q(d.typeCol)+" = ?", d.typeVal)
 			}
+			if d.ofMany != nil {
+				cond, args := d.ofMany.cond(db, d)
+				g = g.Where(cond, args...)
+			}
 			if rows, err = findRows(g, d.relT, "load "+d.name); err != nil {
 				return err
 			}
@@ -232,6 +236,7 @@ func (p pivotDef) rows(ctx context.Context, db *migro.DB, keys []any) ([]map[str
 	if p.typeCol != "" {
 		g = g.Where(db.Dialect.Quote(p.typeCol)+" = ?", p.typeVal)
 	}
+	g = p.constrain(db, g)
 	var out []map[string]any
 	if err := g.Find(&out).Error; err != nil {
 		return nil, wrap(err, "load pivot "+p.table)
@@ -282,7 +287,7 @@ func (d *relDef) eagerPivot(ctx context.Context, db *migro.DB, owners []reflect.
 		rf := assign(db, o, d.name, pick(d.relT, rows, pos))
 		for i, c := range rf.children() {
 			for col, val := range links[i] {
-				setExtra(c.Interface(), "pivot_"+col, val)
+				setExtra(c.Interface(), p.prefix()+"_"+col, val)
 			}
 		}
 	}
@@ -375,48 +380,6 @@ func (d *relDef) eagerMorphTo(ctx context.Context, db *migro.DB, owners []reflec
 
 // ---- counts -----------------------------------------------------------------------------------
 
-func (d *relDef) countInto(ctx context.Context, db *migro.DB, owners []reflect.Value) error {
-	var g *gorm.DB
-	var ownerCol string
-	q := db.Dialect.Quote
-	keys, err := keysOf(ctx, d, owners, d.lk)
-	if err != nil {
-		return err
-	}
-	switch d.kind {
-	case kHasOne, kHasMany, kMorphOne, kMorphMany:
-		ownerCol = d.fk
-		g = relQuery(ctx, db, d.relT, nil)
-		if d.typeCol != "" {
-			g = g.Where(q(d.typeCol)+" = ?", d.typeVal)
-		}
-	case kBelongsToMany, kMorphToMany, kMorphedByMany:
-		ownerCol = d.pivot.ownerCol
-		g = db.Gorm.WithContext(ctx).Table(d.pivot.table)
-		if d.pivot.typeCol != "" {
-			g = g.Where(q(d.pivot.typeCol)+" = ?", d.pivot.typeVal)
-		}
-	default:
-		return migro.Newf(migro.UnsupportedFeature, "withCount is not supported on %s", d.name)
-	}
-	counts := map[string]int64{}
-	if len(keys) > 0 {
-		var rows []map[string]any
-		err := g.Select(q(ownerCol)+" AS k, COUNT(*) AS c").Where(inClause(db, ownerCol), keys).Group(ownerCol).Find(&rows).Error
-		if err != nil {
-			return wrap(err, "count "+d.name)
-		}
-		for _, r := range rows {
-			counts[normKey(r["k"])] = asInt(r["c"])
-		}
-	}
-	for _, o := range owners {
-		k, _ := fieldOf(ctx, d.ownerSch, o, d.lk)
-		setExtra(o.Addr().Interface(), snake(d.name)+"_count", counts[normKey(k)])
-	}
-	return nil
-}
-
 // ---- constraints for lazy queries and existence checks ----------------------------------------
 
 func (d *relDef) constrain(ctx context.Context, db *migro.DB, g *gorm.DB, owner reflect.Value) (*gorm.DB, error) {
@@ -433,6 +396,10 @@ func (d *relDef) constrain(ctx context.Context, db *migro.DB, g *gorm.DB, owner 
 		if d.typeCol != "" {
 			g = g.Where(q(d.typeCol)+" = ?", d.typeVal)
 		}
+		if d.ofMany != nil {
+			cond, args := d.ofMany.cond(db, d)
+			g = g.Where(cond, args...)
+		}
 	case kBelongsTo:
 		k, err := key(d.fk)
 		if err != nil {
@@ -448,6 +415,7 @@ func (d *relDef) constrain(ctx context.Context, db *migro.DB, g *gorm.DB, owner 
 		if d.pivot.typeCol != "" {
 			sub = sub.Where(q(d.pivot.typeCol)+" = ?", d.pivot.typeVal)
 		}
+		sub = d.pivot.constrain(db, sub)
 		g = g.Where(q(d.rk)+" IN (?)", sub)
 	case kThrough:
 		k, err := key(d.lk)
@@ -508,6 +476,7 @@ func (d *relDef) existsCond(db *migro.DB, scope scopeFn) (string, *gorm.DB, erro
 		if d.pivot.typeCol != "" {
 			sub = sub.Where(q(d.pivot.typeCol)+" = ?", d.pivot.typeVal)
 		}
+		sub = d.pivot.constrain(db, sub)
 		return owner(d.lk), sub, nil
 	case kThrough:
 		sub := fresh().Model(reflect.New(d.thSch.ModelType).Interface()).Select(d.thFK).Where(q(d.thFK)+" IS NOT NULL").
@@ -586,7 +555,7 @@ func (q *Query[T]) WhereDoesntHave(relation string, scope scopeFn) *Query[T] {
 // hydrate binds fetched rows and runs the queued eager loads and counts.
 func (q *Query[T]) hydrate(ctx context.Context, rows []T) error {
 	bindAll(q.db, rows, true)
-	if len(rows) == 0 || len(q.with)+len(q.counts) == 0 {
+	if len(rows) == 0 || len(q.with)+len(q.counts)+len(q.aggs) == 0 {
 		return nil
 	}
 	owners := make([]reflect.Value, len(rows))
@@ -604,11 +573,12 @@ func (q *Query[T]) hydrate(ctx context.Context, rows []T) error {
 		}
 	}
 	for _, name := range q.counts {
-		d, _, err := resolveByName(q.db, reflect.TypeFor[T](), name)
-		if err != nil {
+		if err := aggregateOnto(ctx, q.db, owners, aggSpec{rel: name, fn: "COUNT"}); err != nil {
 			return err
 		}
-		if err := d.countInto(ctx, q.db, owners); err != nil {
+	}
+	for _, a := range q.aggs {
+		if err := aggregateOnto(ctx, q.db, owners, a); err != nil {
 			return err
 		}
 	}

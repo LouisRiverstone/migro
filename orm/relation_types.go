@@ -42,10 +42,11 @@ const (
 	kMorphTo
 	kMorphToMany
 	kMorphedByMany
+	kThroughOne // HasOneThrough; resolved as kThrough
 )
 
 func (k kind) single() bool {
-	return k == kHasOne || k == kBelongsTo || k == kMorphOne || k == kMorphTo
+	return k == kHasOne || k == kBelongsTo || k == kMorphOne || k == kMorphTo || k == kThroughOne
 }
 
 func (k kind) hasPivot() bool { return k == kBelongsToMany || k == kMorphToMany || k == kMorphedByMany }
@@ -66,6 +67,7 @@ type relMeta struct {
 	db     *migro.DB
 	name   string
 	loaded bool
+	def    bool // orm:"withDefault": a missing single relation answers with an empty model
 }
 
 func (m *relMeta) rm() *relMeta              { return m }
@@ -90,6 +92,32 @@ func (m *relMeta) Load(ctx context.Context) error {
 		return nil
 	}
 	return loadPath(ctx, m.db, []reflect.Value{m.ownerValue()}, m.name, nil)
+}
+
+// lazyLoad is the implicit path behind Get: it honours the database's strictness before loading.
+func (m *relMeta) lazyLoad(ctx context.Context) error {
+	if !m.loaded && m.db != nil {
+		if err := m.checkLazy(); err != nil {
+			return err
+		}
+	}
+	return m.Load(ctx)
+}
+
+func (m *relMeta) checkLazy() error {
+	s := m.db.Strictness()
+	if !s.LazyLoading {
+		return nil
+	}
+	if e, ok := m.owner.(entity); ok && !e.base().m.exists {
+		return nil // a model that is not persisted has nothing to lazy load
+	}
+	model := reflect.TypeOf(m.owner).Elem().Name()
+	if s.OnLazyLoad != nil {
+		s.OnLazyLoad(model, m.name)
+		return nil
+	}
+	return migro.Newf(migro.LazyLoadingViolation, "lazy loading %s.%s is disabled: eager load it with With(%q) or orm.Load", model, m.name, m.name)
 }
 
 type many[T any] struct {
@@ -119,7 +147,7 @@ func (m *many[T]) children() []reflect.Value {
 
 // Get returns the related rows, loading them on first use.
 func (m *many[T]) Get(ctx context.Context) (Collection[T], error) {
-	if err := m.Load(ctx); err != nil {
+	if err := m.lazyLoad(ctx); err != nil {
 		return nil, err
 	}
 	return m.items, nil
@@ -133,8 +161,15 @@ type one[T any] struct {
 	item    *T
 }
 
-// Item returns the loaded row, or nil.
-func (o *one[T]) Item() *T { return o.item }
+// Item returns the loaded row, or nil. A relation tagged orm:"withDefault" answers with an empty,
+// unsaved model instead of nil once it has been loaded.
+func (o *one[T]) Item() *T {
+	if o.item == nil && o.def && o.loaded && o.db != nil {
+		o.item = new(T)
+		bind(o.db, o.item, false)
+	}
+	return o.item
+}
 
 // Value makes the relation a driver.Valuer that always yields nil. GORM then merges the `gorm`
 // tags of the relation's inner fields into the field's own settings, and the  on those
@@ -158,10 +193,10 @@ func (o *one[T]) children() []reflect.Value {
 
 // Get returns the related row (nil when there is none), loading it on first use.
 func (o *one[T]) Get(ctx context.Context) (*T, error) {
-	if err := o.Load(ctx); err != nil {
+	if err := o.lazyLoad(ctx); err != nil {
 		return nil, err
 	}
-	return o.item, nil
+	return o.Item(), nil
 }
 
 // Query returns a query over the related table already constrained to this owner.
@@ -177,6 +212,8 @@ type (
 	MorphToMany[T any]             struct{ many[T] }
 	MorphedByMany[T any]           struct{ many[T] }
 	HasManyThrough[T, Through any] struct{ many[T] }
+	// HasOneThrough reaches a single T through an intermediate model (Eloquent's hasOneThrough).
+	HasOneThrough[T, Through any] struct{ one[T] }
 )
 
 func (*HasMany[T]) kind() kind                                { return kHasMany }
@@ -189,6 +226,8 @@ func (*MorphToMany[T]) kind() kind                            { return kMorphToM
 func (*MorphedByMany[T]) kind() kind                          { return kMorphedByMany }
 func (*HasManyThrough[T, Through]) kind() kind                { return kThrough }
 func (*HasManyThrough[T, Through]) throughType() reflect.Type { return reflect.TypeFor[Through]() }
+func (*HasOneThrough[T, Through]) kind() kind                 { return kThroughOne }
+func (*HasOneThrough[T, Through]) throughType() reflect.Type  { return reflect.TypeFor[Through]() }
 
 // MorphTo is the inverse of MorphOne/MorphMany: the owner holds <name>_type and <name>_id, and the
 // target is any model registered with MorphMap. Item is a pointer to that model.
@@ -219,7 +258,7 @@ func (m *MorphTo) children() []reflect.Value {
 
 // Get returns the target (nil when it no longer exists), loading it on first use.
 func (m *MorphTo) Get(ctx context.Context) (any, error) {
-	if err := m.Load(ctx); err != nil {
+	if err := m.lazyLoad(ctx); err != nil {
 		return nil, err
 	}
 	return m.item, nil
@@ -249,9 +288,11 @@ func relationFields(t reflect.Type) []int {
 
 func bindRelations(db *migro.DB, ptr reflect.Value) {
 	st := ptr.Elem()
+	tags := relTags(st.Type())
 	for _, i := range relationFields(st.Type()) {
 		m := st.Field(i).Addr().Interface().(relField).rm()
 		m.owner, m.db, m.name = ptr.Interface(), db, st.Type().Field(i).Name
+		_, m.def = tags[i]["withDefault"]
 	}
 }
 
@@ -281,11 +322,17 @@ func (o tagOpts) get(key, def string) string {
 	return def
 }
 
+// pivotCond is one orm:"pivotWhere:col=value" constraint: it filters every read and is stored on attach.
+type pivotCond struct{ col, val string }
+
 type pivotDef struct {
 	table, ownerCol, relatedCol string
 	typeCol, typeVal            string
 	extra                       []string
+	where                       []pivotCond
+	as                          string // prefix of the pivot values in Extras ("pivot" by default)
 	timestamps                  bool
+	model                       reflect.Type // from PivotModels: rows are written through this struct
 }
 
 // relDef is a relation resolved against the database schema.
@@ -304,6 +351,8 @@ type relDef struct {
 
 	typeCol, typeVal string // morph one/many/to: discriminator column (and alias the owner stores)
 	pivot            pivotDef
+
+	ofMany *ofManyDef // HasOne/MorphOne that picks one row out of many
 
 	thSch       *gschema.Schema // through
 	thFK, thKey string          // through.thFK -> owner.lk ; thKey is through's key
@@ -333,6 +382,9 @@ func resolveByName(db *migro.DB, ownerT reflect.Type, name string) (*relDef, rel
 func resolve(db *migro.DB, ownerT reflect.Type, sf reflect.StructField, rf relField) (*relDef, error) {
 	opts := parseTag(sf.Tag.Get("orm"))
 	d := &relDef{kind: rf.kind(), name: sf.Name, ownerT: ownerT, relT: rf.modelType()}
+	if d.kind == kThroughOne {
+		d.kind = kThrough
+	}
 	var err error
 	if d.ownerSch, err = parseModel(db, reflect.New(ownerT).Interface()); err != nil {
 		return nil, err
@@ -364,7 +416,11 @@ func resolve(db *migro.DB, ownerT reflect.Type, sf reflect.StructField, rf relFi
 		if err != nil {
 			return nil, err
 		}
-		d.lk, d.fk, d.typeCol, d.typeVal = opts.get("localKey", ownerPK), name+"_id", name+"_type", morphAlias(ownerT)
+		alias, err := morphAliasFor(ownerT)
+		if err != nil {
+			return nil, err
+		}
+		d.lk, d.fk, d.typeCol, d.typeVal = opts.get("localKey", ownerPK), name+"_id", name+"_type", alias
 	case kBelongsTo:
 		d.fk, d.lk = opts.get("foreignKey", snake(sf.Name)+"_id"), opts.get("relatedKey", relPK)
 	case kBelongsToMany:
@@ -382,10 +438,14 @@ func resolve(db *migro.DB, ownerT reflect.Type, sf reflect.StructField, rf relFi
 			return nil, err
 		}
 		d.lk, d.rk = opts.get("localKey", ownerPK), opts.get("relatedKey", relPK)
+		alias, err := morphAliasFor(ownerT)
+		if err != nil {
+			return nil, err
+		}
 		d.pivot = pivotDef{
 			table: opts.get("pivotTable", name+"s"), ownerCol: opts.get("pivotForeignKey", name+"_id"),
 			relatedCol: opts.get("pivotRelatedForeignKey", relSnake+"_id"),
-			typeCol:    name + "_type", typeVal: morphAlias(ownerT),
+			typeCol:    name + "_type", typeVal: alias,
 		}
 	case kMorphedByMany:
 		name, err := morph("")
@@ -393,10 +453,14 @@ func resolve(db *migro.DB, ownerT reflect.Type, sf reflect.StructField, rf relFi
 			return nil, err
 		}
 		d.lk, d.rk = opts.get("localKey", ownerPK), opts.get("relatedKey", relPK)
+		alias, err := morphAliasFor(d.relT)
+		if err != nil {
+			return nil, err
+		}
 		d.pivot = pivotDef{
 			table: opts.get("pivotTable", name+"s"), ownerCol: opts.get("pivotForeignKey", ownerSnake+"_id"),
 			relatedCol: opts.get("pivotRelatedForeignKey", name+"_id"),
-			typeCol:    name + "_type", typeVal: morphAlias(d.relT),
+			typeCol:    name + "_type", typeVal: alias,
 		}
 	case kThrough:
 		thT := rf.throughType()
@@ -425,6 +489,37 @@ func resolve(db *migro.DB, ownerT reflect.Type, sf reflect.StructField, rf relFi
 			d.pivot.extra = strings.Split(cols, ",")
 		}
 		d.pivot.timestamps = opts["pivotTimestamps"] == "true"
+		d.pivot.as = opts.get("pivotAs", "pivot")
+		if pm, ok := reflect.New(ownerT).Interface().(PivotModels); ok {
+			if proto, found := pm.PivotModels()[sf.Name]; found {
+				pt := reflect.TypeOf(proto)
+				for pt != nil && pt.Kind() == reflect.Pointer {
+					pt = pt.Elem()
+				}
+				if pt == nil || pt.Kind() != reflect.Struct {
+					return nil, migro.Newf(migro.InvalidSchema, "relation %s.%s: PivotModels wants a struct, got %T", ownerT.Name(), sf.Name, proto)
+				}
+				d.pivot.model = pt
+			}
+		}
+		for _, cond := range strings.Split(opts["pivotWhere"], ",") {
+			if cond = strings.TrimSpace(cond); cond == "" {
+				continue
+			}
+			col, val, ok := strings.Cut(cond, "=")
+			if !ok || strings.TrimSpace(col) == "" {
+				return nil, migro.Newf(migro.InvalidSchema, "relation %s.%s: pivotWhere wants col=value pairs, got %q", ownerT.Name(), sf.Name, cond)
+			}
+			d.pivot.where = append(d.pivot.where, pivotCond{col: strings.TrimSpace(col), val: strings.TrimSpace(val)})
+		}
+	}
+	if spec := opts["ofMany"]; spec != "" {
+		if d.kind != kHasOne && d.kind != kMorphOne {
+			return nil, migro.Newf(migro.InvalidSchema, "relation %s.%s: ofMany only applies to HasOne and MorphOne", ownerT.Name(), sf.Name)
+		}
+		if d.ofMany, err = parseOfMany(spec, d.relSch); err != nil {
+			return nil, migro.Wrap(migro.InvalidSchema, err, "relation %s.%s", ownerT.Name(), sf.Name)
+		}
 	}
 	return d, nil
 }
@@ -452,8 +547,9 @@ func (d *relDef) required() []requirement {
 
 var morphMap = struct {
 	sync.RWMutex
-	byAlias map[string]reflect.Type
-	byType  map[reflect.Type]string
+	byAlias  map[string]reflect.Type
+	byType   map[reflect.Type]string
+	enforced bool
 }{byAlias: map[string]reflect.Type{}, byType: map[reflect.Type]string{}}
 
 // MorphMap registers the aliases stored in *_type columns (Laravel's Relation::morphMap):
@@ -473,13 +569,26 @@ func MorphMap(m map[string]any) {
 	}
 }
 
-func morphAlias(t reflect.Type) string {
+// EnforceMorphMap is MorphMap that also refuses models missing from the map (Laravel's
+// Relation::enforceMorphMap): without it an unmapped model silently stores its type name, and renaming
+// the Go type later orphans every row.
+func EnforceMorphMap(m map[string]any) {
+	MorphMap(m)
+	morphMap.Lock()
+	morphMap.enforced = true
+	morphMap.Unlock()
+}
+
+func morphAliasFor(t reflect.Type) (string, error) {
 	morphMap.RLock()
 	defer morphMap.RUnlock()
 	if a, ok := morphMap.byType[t]; ok {
-		return a
+		return a, nil
 	}
-	return snake(t.Name())
+	if morphMap.enforced {
+		return "", migro.Newf(migro.UnknownMorphType, "model %s is not in the morph map (EnforceMorphMap is on)", t.Name())
+	}
+	return snake(t.Name()), nil
 }
 
 func morphModel(alias string) (reflect.Type, bool) {

@@ -14,7 +14,15 @@ type Query[T any] struct {
 	g      *gorm.DB
 	with   []withSpec
 	counts []string
+	aggs   []aggSpec
 	skip   *skipSet // global scopes switched off for this query
+	orders []orderSpec
+}
+
+// orderSpec remembers an OrderBy so cursor pagination can build its keyset condition.
+type orderSpec struct {
+	col  string
+	desc bool
 }
 
 func (q *Query[T]) s(ctx context.Context) *gorm.DB {
@@ -51,6 +59,7 @@ func (q *Query[T]) OrderBy(col, dir string) *Query[T] {
 		return q
 	}
 	q.g = q.g.Order(q.db.Dialect.Quote(col) + " " + strings.ToUpper(d))
+	q.orders = append(q.orders, orderSpec{col: col, desc: d == "desc"})
 	return q
 }
 

@@ -63,3 +63,23 @@ Two traps:
 - **Registered seeders run in name order when there is no `DatabaseSeeder`**, which ignores foreign keys. Start from the root seeder (`r.Seed(ctx)`) or pick one with `r.RunOnly(ctx, "UserSeeder")`.
 
 The repository's own [`integration/`](https://github.com/LouisRiverstone/migro/tree/main/integration) suite is a worked example: 16 migrations, class seeders, factories and models, with tests for constraints, referential actions, every relation kind, rollbacks and seeder atomicity. It runs on SQLite, PostgreSQL and MySQL.
+
+## Test helpers
+
+The `dbtest` package has the assertions and fixtures Laravel's test case provides:
+
+```go
+import "github.com/LouisRiverstone/migro/dbtest"
+
+dbtest.AssertDatabaseHas(t, db, "users", map[string]any{"email": "ana@example.com"})
+dbtest.AssertDatabaseMissing(t, db, "users", map[string]any{"email": "gone@example.com"})
+dbtest.AssertDatabaseCount(t, db, "users", 3)
+dbtest.AssertSoftDeleted(t, db, "users", map[string]any{"id": 7})     // deleted_at is set
+dbtest.AssertNotSoftDeleted(t, db, "users", map[string]any{"id": 8})
+dbtest.AssertQueryCount(t, db, 2, func() { /* code under test */ })   // catches N+1
+
+dbtest.RefreshDatabase(t, db, migrations)   // drop everything, migrate from scratch
+tx := dbtest.Transaction(t, db)             // rolled back when the test ends; use tx in the test
+```
+
+A `nil` value in the `where` map matches `NULL`. `Transaction` cannot roll back DDL that commits implicitly (MySQL).

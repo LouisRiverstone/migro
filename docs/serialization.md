@@ -162,3 +162,13 @@ Serialization starts from "everything except what is hidden", so adding a column
 ## Testing serialization
 
 `integration/serialization_test.go` covers hidden columns, `MakeVisible`/`MakeHidden` being per call, hidden winning, `DateFormat` at the root and in relations, extras, and collection output as a JSON array.
+
+## Renaming keys
+
+`SerializeAs` renames columns and relations in `ToMap` and JSON (Lucid's `serializeAs`):
+
+```go
+func (User) SerializeAs() map[string]string {
+    return map[string]string{"created_at": "createdAt", "posts": "articles"}
+}
+```

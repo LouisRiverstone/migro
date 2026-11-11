@@ -50,3 +50,33 @@ Names: `before:create`, `after:create`, `before:update`, `after:update`, `before
 - Handlers run inside the operation's transaction, so an abort rolls the write back.
 - Like GORM hooks, events do not fire for `UpdateColumn(s)`, raw SQL, `Exec`, or the query builder.
 - Events are in-process only.
+
+## Observers
+
+An observer groups the hooks of one model in a type. It implements any of the hook interfaces from `events`, and the compiler checks each signature against the model:
+
+```go
+type UserObserver struct{ mailer Mailer }
+
+func (o *UserObserver) Creating(ctx context.Context, u *User) error { return validate(u) }
+func (o *UserObserver) Created(ctx context.Context, u *User) error  { return o.mailer.Welcome(u.Email) }
+
+off, err := events.Observe[User](bus, &UserObserver{mailer})
+```
+
+| Hook | Event | Aborts on error |
+|---|---|---|
+| `Creating`, `Created` | `before:create`, `after:create` | `Creating` |
+| `Updating`, `Updated` | `before:update`, `after:update` | `Updating` |
+| `Saving`, `Saved` | `before:save`, `after:save` | `Saving` |
+| `Deleting`, `Deleted` | `before:delete`, `after:delete` | `Deleting` |
+| `Retrieved` | `after:find` | |
+| `Restoring`, `Restored` | `before:restore`, `after:restore` | `Restoring` |
+| `ForceDeleting`, `ForceDeleted` | `before:force_delete`, `after:force_delete` | `ForceDeleting` |
+| `Replicating` | `before:replicate` | yes |
+
+`Observe` returns an error when the type implements none of them, which usually means a misspelled method. `off()` removes every hook it added. `migro make:observer User` writes a starting file.
+
+The restore, force-delete and replicate events come from the instance methods (`Restore`, `ForceDelete`, `orm.Replicate`), not from GORM, so they fire only for models bound to a database with an attached bus. A force delete also fires `before:delete` and `after:delete`.
+
+Silence events for one call with `events.WithoutEvents(ctx)`, or use `SaveQuietly` and `DeleteQuietly`.

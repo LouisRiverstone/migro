@@ -100,3 +100,11 @@ stmts, err := schema.CreateSQL(db.Dialect, "users", func(t *schema.Table) { t.In
 ```
 
 `schema.AlterSQL` does the same for `AlterTable`.
+
+## Full-text indexes
+
+```go
+t.FullText("title", "body")
+```
+
+Creates a `FULLTEXT` index on MySQL and MariaDB and a GIN index on `to_tsvector` on PostgreSQL and CockroachDB. Other databases fail with `UNSUPPORTED_FEATURE`. Query it with `WhereFullText` (see [Advanced queries](advanced-queries.html#full-text-search)).

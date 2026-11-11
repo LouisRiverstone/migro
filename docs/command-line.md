@@ -44,7 +44,7 @@ MIGRO_ANALYTICS_DIALECT=mysql
 MIGRO_ANALYTICS_DSN=user:pass@tcp(127.0.0.1:3306)/analytics?parseTime=true
 ```
 
-Optional folders (defaults shown): `MIGRO_MIGRATIONS_DIR=database/migrations`, `MIGRO_SEEDERS_DIR=database/seeders`, `MIGRO_FACTORIES_DIR=database/factories`, `MIGRO_MODELS_DIR=app/models`.
+Optional folders (defaults shown): `MIGRO_MIGRATIONS_DIR=database/migrations`, `MIGRO_SEEDERS_DIR=database/seeders`, `MIGRO_FACTORIES_DIR=database/factories`, `MIGRO_MODELS_DIR=app/models`, `MIGRO_OBSERVERS_DIR=app/observers`, `MIGRO_SCHEMA_DIR=database/schema`.
 
 ### How it runs
 
@@ -88,7 +88,7 @@ func main() {
 | `db:seed` | Run seeders. Starts from `DatabaseSeeder` when you registered one (it calls the others with `seed.Call`), otherwise runs every seeder by name. `--class=UserSeeder` runs one; `--once` skips those that already ran. |
 | `make:seeder <Name>` | New seeder. |
 | `make:factory <Name>` | New factory. `--model=example.com/app/models.User` names the model (default: `<module>/app/models`). |
-| `make:model <Name>` | New model. `-m` also creates its migration, `-f` a factory, `-s` a seeder, `-a` all three. |
+| `make:model <Name>` | New model. `-m` also creates its migration, `-f` a factory, `-s` a seeder, `-a` all three. `--uuid` or `--ulid` embeds a string-key model. |
 | `help` | List commands. |
 
 Every command accepts `--database=<name>` to pick a connection, and `--force` / `--no-interaction` (`-n`). Exit codes: `0` ok, `1` error, `2` bad usage.
@@ -116,3 +116,20 @@ func (CreateEventsTable) Connection() string { return "analytics" }
 ```
 
 `migro migration:run` then runs only unpinned migrations (on the default connection), and `migro migration:run --database=analytics` runs only those pinned to `analytics`.
+
+## More commands
+
+| Command | What it does |
+|---|---|
+| `migration:run --seed` | Migrate, then run the seeders |
+| `schema:dump` | Squash the migrations into `database/schema/<dialect>-schema.sql` (see [Schema dump](schema-dump.html)) |
+| `db:wipe` | Drop every table (asks first in production) |
+| `db:show [--counts]` | Dialect, connection and the tables, optionally with row counts |
+| `db:table <name>` | Columns, types and indexes of one table |
+| `model:show <Name>` | A model's table, columns, relations and the optional behaviours it implements (needs `App.Models`, like `migration:diff`) |
+| `model:prune` | Delete the stale rows of every model registered with `orm.RegisterPrunable` |
+| `make:observer <Name> [--model=import/path.Type]` | A model observer |
+| `make:scope <Name> --model=Type` | A local query scope in the models package |
+| `make:resource <Name> [--model=Type]` | An API resource in the models package |
+| `make:cast <Name>` | A custom cast in the models package |
+

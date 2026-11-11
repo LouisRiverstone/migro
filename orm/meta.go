@@ -18,11 +18,14 @@ type meta struct {
 	orig   map[string]any
 	exists bool
 	extras map[string]any
+
+	changes map[string]any // columns the last Save wrote, with their new values
+	created bool           // the last Save inserted the row
 }
 
-type entity interface{ base() *BaseModel }
+type entity interface{ base() *Record }
 
-func (b *BaseModel) base() *BaseModel { return b }
+func (b *Record) base() *Record { return b }
 
 // Bind attaches v (a struct pointer) to db so its instance methods and relations work. A model with
 // a non-zero primary key is treated as already persisted.
@@ -53,7 +56,7 @@ func bindAll[T any](db *migro.DB, rows []T, exists bool) {
 	}
 }
 
-func (b *BaseModel) bound() (*meta, error) {
+func (b *Record) bound() (*meta, error) {
 	if b.m.db == nil || b.m.self == nil {
 		return nil, migro.Newf(migro.UnboundModel, "model is not bound to a database: load it through orm.New[T](db) or call orm.Bind")
 	}

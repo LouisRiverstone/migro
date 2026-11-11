@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"strings"
 
 	"github.com/LouisRiverstone/migro"
@@ -20,6 +21,27 @@ func (b *Bus) Attach(db *migro.DB) error {
 		return migro.Wrap(migro.InvalidConfig, err, "attach events")
 	}
 	return nil
+}
+
+// From returns the bus attached to db, or nil when Attach was never called.
+func From(db *migro.DB) *Bus {
+	if db == nil {
+		return nil
+	}
+	p, ok := db.Gorm.Plugins[plugin{}.Name()].(plugin)
+	if !ok {
+		return nil
+	}
+	return p.bus
+}
+
+// EmitModel emits a lifecycle event for model on db's bus. It is a no-op without a bus.
+func EmitModel(ctx context.Context, db *migro.DB, name, table string, model any) error {
+	b := From(db)
+	if b == nil {
+		return nil
+	}
+	return b.Emit(ctx, Event{Name: name, Table: table, Model: model})
 }
 
 func (p plugin) Initialize(db *gorm.DB) error {

@@ -82,3 +82,21 @@ func (d *msDialect) DropConstraint(t, name string) string {
 	return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", d.Quote(t), d.Quote(name))
 }
 func (d *msDialect) DropForeign(t, name string) string { return d.DropConstraint(t, name) }
+
+func (d *msDialect) LockSQL(dialect.LockMode) string { return "" } // needs table hints, not a clause
+
+func (d *msDialect) JSONExtract(col string, path []string) string {
+	return "JSON_VALUE(" + col + ", '" + dialect.JSONPathString(path) + "')"
+}
+
+func (d *msDialect) DatePart(col string, part dialect.DatePart) string {
+	switch part {
+	case dialect.PartYear:
+		return "YEAR(" + col + ")"
+	case dialect.PartMonth:
+		return "MONTH(" + col + ")"
+	case dialect.PartDay:
+		return "DAY(" + col + ")"
+	}
+	return "CAST(" + col + " AS DATE)"
+}

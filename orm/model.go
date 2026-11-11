@@ -14,22 +14,71 @@ import (
 	"gorm.io/gorm"
 )
 
-// BaseModel is an optional embeddable base, like Lucid's BaseModel.
+// Record carries the active-record behaviour (Save, Delete, Refresh, Fill, IsDirty, relations, ...) without
+// any column. BaseModel, UUIDModel and ULIDModel embed it and add a primary key; embed it yourself to
+// bring your own key.
 //
 // Models returned by Model[T] / Query[T] are bound to their database, which enables the instance
-// methods (Save, Delete, Refresh, Fill, IsDirty, ...) and lazy relations. A struct you build by hand
-// is unbound until you create it through the repository or call Bind.
+// methods and lazy relations. A struct you build by hand is unbound until you create it through the
+// repository or call Bind.
+type Record struct {
+	m meta // unexported: GORM ignores it
+}
+
+// BaseModel is an optional embeddable base with an auto-increment uint key, like Lucid's BaseModel.
 type BaseModel struct {
+	Record
 	ID        uint `gorm:"primaryKey"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
-
-	m meta // unexported: GORM ignores it
 }
 
 // SoftDeleteModel adds soft deletes: Delete sets DeletedAt and queries hide those rows.
 type SoftDeleteModel struct {
 	BaseModel
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
+// UUIDModel is BaseModel with a time-ordered UUID (version 7) string key, filled on insert
+// (Eloquent's HasUuids). Every instance method works, unlike the bare UUIDKey.
+type UUIDModel struct {
+	Record
+	ID        string `gorm:"primaryKey;size:36"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (k *UUIDModel) BeforeCreate(*gorm.DB) error {
+	if k.ID == "" {
+		k.ID = NewUUID()
+	}
+	return nil
+}
+
+// SoftDeleteUUIDModel is UUIDModel with soft deletes.
+type SoftDeleteUUIDModel struct {
+	UUIDModel
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
+// ULIDModel is BaseModel with a 26-character ULID key (Eloquent's HasUlids).
+type ULIDModel struct {
+	Record
+	ID        string `gorm:"primaryKey;size:26"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (k *ULIDModel) BeforeCreate(*gorm.DB) error {
+	if k.ID == "" {
+		k.ID = NewULID()
+	}
+	return nil
+}
+
+// SoftDeleteULIDModel is ULIDModel with soft deletes.
+type SoftDeleteULIDModel struct {
+	ULIDModel
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
@@ -67,7 +116,11 @@ func wrap(err error, op string) error {
 // Find loads by primary key; returns migro.ErrNotFound-matching error when missing.
 func (m *Model[T]) Find(ctx context.Context, id any) (*T, error) {
 	var v T
-	if err := m.scoped(ctx).First(&v, id).Error; err != nil {
+	g, err := m.byKey(ctx, []any{id})
+	if err != nil {
+		return nil, err
+	}
+	if err := g.First(&v).Error; err != nil {
 		return nil, wrap(err, "find")
 	}
 	bind(m.db, &v, true)
@@ -86,13 +139,37 @@ func (m *Model[T]) Create(ctx context.Context, v *T) error {
 		return err
 	}
 	bind(m.db, v, true)
-	return nil
+	markCreated(v)
+	return touchParents(ctx, m.db, v)
+}
+
+// byKey scopes a query to the given primary keys. It names the key column itself: GORM would read a
+// non-numeric string passed to First/Find/Delete as raw SQL, which breaks string and UUID keys.
+func (m *Model[T]) byKey(ctx context.Context, ids []any) (*gorm.DB, error) {
+	sch, err := parseModel(m.db, new(T))
+	if err != nil {
+		return nil, err
+	}
+	pk, err := primaryKey(sch)
+	if err != nil {
+		return nil, err
+	}
+	g := m.scoped(ctx)
+	if len(ids) == 1 {
+		return g.Where(m.db.Dialect.Quote(pk)+" = ?", ids[0]), nil
+	}
+	return g.Where(m.db.Dialect.Quote(pk)+" IN ?", ids), nil
 }
 
 // Make builds an unsaved model from attrs, honouring Fillable/Guarded (Eloquent's new Model($attrs)).
 func (m *Model[T]) Make(attrs map[string]any) (*T, error) {
 	v := new(T)
 	bind(m.db, v, false)
+	if d, ok := any(v).(Defaults); ok {
+		if err := fillWith(context.Background(), m.db, v, d.Defaults(), false); err != nil {
+			return nil, err
+		}
+	}
 	if err := fill(context.Background(), m.db, v, attrs); err != nil {
 		return nil, err
 	}
@@ -116,7 +193,11 @@ func (m *Model[T]) Destroy(ctx context.Context, ids ...any) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	res := m.db.Gorm.WithContext(ctx).Delete(new(T), ids)
+	g, err := m.byKey(ctx, ids)
+	if err != nil {
+		return 0, err
+	}
+	res := g.Delete(new(T))
 	return res.RowsAffected, wrap(res.Error, "destroy")
 }
 
@@ -126,7 +207,11 @@ func (m *Model[T]) FindMany(ctx context.Context, ids ...any) (Collection[T], err
 		return Collection[T]{}, nil
 	}
 	var out Collection[T]
-	if err := m.scoped(ctx).Find(&out, ids).Error; err != nil {
+	g, err := m.byKey(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	if err := g.Find(&out).Error; err != nil {
 		return nil, wrap(err, "find many")
 	}
 	bindAll(m.db, out, true)
@@ -144,6 +229,9 @@ func (m *Model[T]) CreateMany(ctx context.Context, vs []T) error {
 		return err
 	}
 	bindAll(m.db, vs, true)
+	for i := range vs {
+		markCreated(&vs[i])
+	}
 	return nil
 }
 
@@ -216,12 +304,18 @@ func (m *Model[T]) upsertMany(ctx context.Context, keys []string, rows []T, upda
 
 // Save inserts or updates all fields by primary key.
 func (m *Model[T]) Save(ctx context.Context, v *T) error {
-	return wrap(m.db.Gorm.WithContext(ctx).Save(v).Error, "save")
+	if err := wrap(m.db.Gorm.WithContext(ctx).Save(v).Error, "save"); err != nil {
+		return err
+	}
+	return touchParents(ctx, m.db, v)
 }
 
 // Delete removes v (soft when T has gorm.DeletedAt).
 func (m *Model[T]) Delete(ctx context.Context, v *T) error {
-	return wrap(m.db.Gorm.WithContext(ctx).Delete(v).Error, "delete")
+	if err := wrap(m.db.Gorm.WithContext(ctx).Delete(v).Error, "delete"); err != nil {
+		return err
+	}
+	return touchParents(ctx, m.db, v)
 }
 
 // FirstOrCreate finds a row matching the non-zero fields of where, or creates it with attrs applied.

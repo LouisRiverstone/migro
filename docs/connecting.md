@@ -54,3 +54,39 @@ The table above lists each dialect, the package to import and a sample DSN.
 ### Adopting an existing connection
 
 To adopt a `*gorm.DB` you already have: `migro.Adopt(gormDB, dialect)`.
+
+### Named connections
+
+`migro.Manager` holds several databases by name and opens each the first time it is used (Laravel's `DB::connection`):
+
+```go
+mgr, err := migro.NewManager("main", map[string]migro.Config{
+    "main":  {Dialect: "postgres", DSN: mainDSN},
+    "audit": {Dialect: "postgres", DSN: auditDSN, Replicas: []string{auditReplicaDSN}},
+})
+defer mgr.Close()
+
+db, err := mgr.Connection(ctx, "audit")   // "" means the default
+```
+
+A model can say where it lives, and `orm.Using` follows it:
+
+```go
+func (AuditLog) Connection() string { return "audit" }
+
+logs, err := orm.Using[AuditLog](ctx, mgr)   // a repository on the "audit" connection
+```
+
+`mgr.Purge("audit")` closes a connection so the next call reopens it. Each connection keeps its own pool, replicas and events. For key-based routing across identical databases use [sharding](scaling.html); the manager is for databases that differ.
+
+### Joining a transaction
+
+A model loaded outside a transaction can move into one (Lucid's `useTransaction`):
+
+```go
+err := db.Transaction(ctx, func(tx *migro.DB) error {
+    user.UseTransaction(tx)
+    user.Name = "Ana"
+    return user.Save(ctx)   // inside tx
+})
+```

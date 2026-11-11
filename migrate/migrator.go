@@ -21,6 +21,7 @@ type Migrator struct {
 	conn       string
 	defaultCon string
 	filter     bool
+	dump       *Dump
 }
 
 // Option customises a Migrator.
@@ -263,6 +264,12 @@ func (m *Migrator) runPending(ctx context.Context, opts RunOptions) (Result, err
 	if err != nil {
 		return Result{}, err
 	}
+	res := Result{}
+	if m.dump != nil && len(done) == 0 {
+		if done, err = m.applyDump(ctx, opts, &res); err != nil {
+			return res, err
+		}
+	}
 	have := map[string]record{}
 	batch := 0
 	for _, r := range done {
@@ -276,7 +283,7 @@ func (m *Migrator) runPending(ctx context.Context, opts RunOptions) (Result, err
 			return Result{}, migro.Newf(migro.ChecksumMismatch, "applied migration %q was modified", mig.Name)
 		}
 	}
-	res := Result{Batch: batch + 1}
+	res.Batch = batch + 1
 	for _, mig := range list {
 		if _, ok := have[mig.Name]; ok {
 			continue
@@ -304,6 +311,29 @@ func (m *Migrator) runPending(ctx context.Context, opts RunOptions) (Result, err
 		res.Batch = 0
 	}
 	return res, nil
+}
+
+// applyDump loads the dump into a database with no migration history and returns the records that
+// stand for it. Under Pretend it only reports the SQL.
+func (m *Migrator) applyDump(ctx context.Context, opts RunOptions, res *Result) ([]record, error) {
+	const name = "schema dump"
+	m.emit(Migrating, name, 0)
+	start := time.Now()
+	if opts.Pretend {
+		if m.dump.Dialect != m.db.Dialect.Name() {
+			return nil, migro.Newf(migro.InvalidSchema, "the schema dump is for %s, this database is %s", m.dump.Dialect, m.db.Dialect.Name())
+		}
+		res.SQL = map[string][]string{name: m.dump.Statements}
+	} else if err := m.LoadDump(ctx, *m.dump); err != nil {
+		return nil, err
+	}
+	m.emit(Migrated, name, time.Since(start))
+	res.Names = append(res.Names, name)
+	recs := make([]record, len(m.dump.Migrations))
+	for i, n := range m.dump.Migrations {
+		recs[i] = record{Name: n, Batch: 1}
+	}
+	return recs, nil
 }
 
 // RevertOptions select what to roll back. Set at most one of Steps, ToBatch, All;

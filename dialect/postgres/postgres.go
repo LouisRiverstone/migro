@@ -143,3 +143,41 @@ func (d *pgDialect) SupportsIndexes() bool { return d.v != redshift }
 
 // CockroachDB restricts mixing schema changes in explicit transactions.
 func (d *pgDialect) TransactionalDDL() bool { return d.v != cockroach }
+
+func (d *pgDialect) JSONExtract(col string, path []string) string {
+	return "(" + col + "::jsonb #>> '{" + strings.Join(path, ",") + "}')"
+}
+
+// tsvector builds the document the search runs against; the index uses the same expression.
+func tsvector(cols []string) string {
+	parts := make([]string, len(cols))
+	for i, c := range cols {
+		parts[i] = "coalesce(" + c + "::text, '')"
+	}
+	return "to_tsvector('simple', " + strings.Join(parts, " || ' ' || ") + ")"
+}
+
+func (d *pgDialect) FullTextMatch(cols []string, boolean bool) string {
+	if d.v == redshift {
+		return ""
+	}
+	query := "plainto_tsquery"
+	if boolean {
+		query = "websearch_to_tsquery"
+	}
+	return tsvector(cols) + " @@ " + query + "('simple', ?)"
+}
+
+func (d *pgDialect) FullTextIndex(table, name string, cols []string) string {
+	if d.v == redshift {
+		return ""
+	}
+	return "CREATE INDEX " + name + " ON " + table + " USING GIN (" + tsvector(cols) + ")"
+}
+
+func (d *pgDialect) LockSQL(mode dialect.LockMode) string {
+	if d.v == redshift {
+		return ""
+	}
+	return d.Base.LockSQL(mode)
+}
