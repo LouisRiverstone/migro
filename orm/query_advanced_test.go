@@ -54,14 +54,17 @@ func TestAdvancedWheres(t *testing.T) {
 	}
 
 	sql := must(users.Query().WhereJSON("name", "address.city", "=", "Rio").ToSQL(ctx))
-	if !strings.Contains(sql, "json_extract") || !strings.Contains(sql, "$.address.city") {
+	lower := strings.ToLower(sql) // json_extract on SQLite, JSON_EXTRACT on MySQL, #>> on PostgreSQL
+	if !strings.Contains(lower, "json") && !strings.Contains(lower, "#>>") || !strings.Contains(lower, "address") || !strings.Contains(lower, "city") {
 		t.Fatalf("WhereJSON: %s", sql)
 	}
 	if _, err := users.Query().WhereJSON("name", "a'); DROP TABLE x;--", "=", 1).Get(ctx); migro.CodeOf(err) != migro.QueryFailed {
 		t.Fatalf("JSON path must be validated: %v", err)
 	}
-	if _, err := users.Query().WhereFullText("go", "name").Get(ctx); migro.CodeOf(err) != migro.UnsupportedFeature {
-		t.Fatalf("sqlite has no full text: %v", err)
+	if db.Dialect.Name() == "sqlite" {
+		if _, err := users.Query().WhereFullText("go", "name").Get(ctx); migro.CodeOf(err) != migro.UnsupportedFeature {
+			t.Fatalf("sqlite has no full text: %v", err)
+		}
 	}
 }
 
@@ -81,9 +84,9 @@ func TestSoleFirstWhereLocks(t *testing.T) {
 	if u := must(users.Query().FirstWhere(ctx, "email", "bia@x.io")); u.Name != "bia" {
 		t.Fatalf("FirstWhere: %+v", u)
 	}
-	// SQLite ignores row locks, so the query still runs
-	if n := must(users.Query().LockForUpdate().SharedLock().Count(ctx)); n != 3 {
-		t.Fatalf("locks on sqlite: %d", n)
+	// SQLite ignores row locks, so the query still runs. Get, not Count: PostgreSQL refuses a lock with an aggregate.
+	if got := must(users.Query().LockForUpdate().SharedLock().Get(ctx)); len(got) != 3 {
+		t.Fatalf("locks: %d", len(got))
 	}
 }
 

@@ -188,7 +188,7 @@ func TestDefaultsSerializeAsAndHelpers(t *testing.T) {
 	a.Name = "quiet rename"
 	ok(t, a.SaveWithoutTimestamps(ctx))
 	fresh := must(orm.New[fAuthor](db).Find(ctx, 1))
-	if fresh.Name != "quiet rename" || fresh.UpdatedAt.Year() != 2001 {
+	if fresh.Name != "quiet rename" || fresh.UpdatedAt.UTC().Year() != 2001 {
 		t.Fatalf("SaveWithoutTimestamps: %+v", fresh)
 	}
 }

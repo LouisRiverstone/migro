@@ -53,7 +53,7 @@ func TestTouchesCascade(t *testing.T) {
 	for _, tbl := range []string{"t_posts", "t_blogs"} {
 		var at time.Time
 		ok(t, db.Gorm.Raw("SELECT updated_at FROM "+tbl).Row().Scan(&at))
-		if at.Year() == 2001 {
+		if at.UTC().Year() == 2001 {
 			t.Fatalf("%s was not touched by the cascade", tbl)
 		}
 	}
