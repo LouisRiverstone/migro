@@ -41,6 +41,7 @@ callouts:
     color: red
 
 exclude:
+  - build-versions.sh
   - Gemfile
   - Gemfile.lock
   - vendor

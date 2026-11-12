@@ -50,4 +50,4 @@ PostgreSQL, CockroachDB, Redshift, MySQL, MariaDB, SQLite (pure Go), SQL Server 
 Then pick the page you need from the sidebar. If you want to help, read [Contributing](contributing.md).
 
 {: .note }
-migro is young. There are no tagged releases yet, so `@latest` means the newest commit on `main`. Pin a commit in `go.mod` if you need reproducible builds.
+migro is young. The latest release is v0.1.0, and while the version starts with 0 the API may still change between minor versions, so pin the version in `go.mod` and read the [release notes](https://github.com/LouisRiverstone/migro/releases) before upgrading.
