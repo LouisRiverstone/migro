@@ -20,6 +20,7 @@ type Table struct {
 	columns  []*Column
 	indexes  []*Index
 	uniques  []*Index
+	fulltext []*Index
 	foreigns []*Foreign
 	primary  []string
 
@@ -262,6 +263,15 @@ func (t *Table) Index(cols ...string) *Index {
 	return i
 }
 
+// FullText adds a full-text index over cols, for Query.WhereFullText. MySQL gets a FULLTEXT index and
+// PostgreSQL a GIN index on to_tsvector. SQLite, SQL Server and Oracle fail with UNSUPPORTED_FEATURE:
+// they need a virtual table or a catalog that a column list cannot describe.
+func (t *Table) FullText(cols ...string) *Index {
+	i := &Index{cols: cols}
+	t.fulltext = append(t.fulltext, i)
+	return i
+}
+
 func (t *Table) Foreign(cols ...string) *Foreign {
 	f := &Foreign{cols: cols}
 	t.foreigns = append(t.foreigns, f)
@@ -424,6 +434,17 @@ func (t *Table) indexSQL(d dialect.Dialect) ([]string, error) {
 	out := make([]string, 0, len(t.indexes))
 	for _, i := range t.indexes {
 		out = append(out, fmt.Sprintf("CREATE INDEX %s ON %s (%s)", d.Quote(named(i.name, t, i.cols, "index")), d.Quote(t.name), quoteAll(d, i.cols)))
+	}
+	for _, i := range t.fulltext {
+		quoted := make([]string, len(i.cols))
+		for n, c := range i.cols {
+			quoted[n] = d.Quote(c)
+		}
+		stmt := dialect.FeaturesOf(d).FullTextIndex(d.Quote(t.name), d.Quote(named(i.name, t, i.cols, "fulltext")), quoted)
+		if stmt == "" {
+			return nil, migro.Newf(migro.UnsupportedFeature, "%s has no full-text index", d.Name())
+		}
+		out = append(out, stmt)
 	}
 	return out, nil
 }

@@ -194,7 +194,7 @@ func (d *relDef) pivotBase(ctx context.Context, db *migro.DB, ownerKey any) *gor
 	if p.typeCol != "" {
 		g = g.Where(db.Dialect.Quote(p.typeCol)+" = ?", p.typeVal)
 	}
-	return g
+	return p.constrain(db, g)
 }
 
 func (d *relDef) existing(ctx context.Context, db *migro.DB, ownerKey any) (map[string]any, error) {
@@ -227,6 +227,9 @@ func (d *relDef) attach(ctx context.Context, db *migro.DB, ownerKey any, ids []a
 		if d.pivot.typeCol != "" {
 			row[d.pivot.typeCol] = d.pivot.typeVal
 		}
+		for _, c := range d.pivot.where { // pivotWhere values are part of the link
+			row[c.col] = c.val
+		}
 		if d.pivot.timestamps {
 			now := time.Now()
 			row["created_at"], row["updated_at"] = now, now
@@ -239,7 +242,42 @@ func (d *relDef) attach(ctx context.Context, db *migro.DB, ownerKey any, ids []a
 	if len(rows) == 0 {
 		return nil, nil
 	}
+	if d.pivot.model != nil {
+		return added, d.createViaModel(ctx, db, rows)
+	}
 	return added, wrap(db.Gorm.WithContext(ctx).Table(d.pivot.table).Create(rows).Error, "attach "+d.pivot.table)
+}
+
+// PivotModels lets a model say that a many-to-many relation's pivot rows are a struct of their own
+// (Eloquent's using(Pivot::class)). Attach then creates each row through that struct, so its hooks
+// run, its own key is generated (UUIDKey, a BeforeCreate) and its defaults apply. The map is keyed by
+// the relation's field name; the value is the pivot struct or a pointer to it. The struct's columns
+// must include the pivot's two keys and every column you pass to AttachWith.
+//
+//	func (User) PivotModels() map[string]any { return map[string]any{"Roles": RoleUser{}} }
+type PivotModels interface{ PivotModels() map[string]any }
+
+func (d *relDef) createViaModel(ctx context.Context, db *migro.DB, rows []map[string]any) error {
+	sch, err := parseModel(db, reflect.New(d.pivot.model).Interface())
+	if err != nil {
+		return err
+	}
+	list := reflect.MakeSlice(reflect.SliceOf(d.pivot.model), len(rows), len(rows))
+	for i, row := range rows {
+		item := list.Index(i)
+		for col, val := range row {
+			f, ok := sch.FieldsByDBName[col]
+			if !ok {
+				return migro.Newf(migro.InvalidSchema, "pivot model %s has no column %q", d.pivot.model.Name(), col)
+			}
+			if err := f.Set(ctx, item, val); err != nil {
+				return migro.Wrap(migro.InvalidSchema, err, "pivot model %s column %q", d.pivot.model.Name(), col)
+			}
+		}
+	}
+	ptr := reflect.New(list.Type())
+	ptr.Elem().Set(list)
+	return wrap(db.Gorm.WithContext(ctx).Table(d.pivot.table).Create(ptr.Interface()).Error, "attach "+d.pivot.table)
 }
 
 func (d *relDef) detach(ctx context.Context, db *migro.DB, ownerKey any, ids []any) error {

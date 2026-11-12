@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strconv"
 
 	"github.com/LouisRiverstone/migro"
@@ -12,6 +13,7 @@ import (
 func (q *Query[T]) clone() *Query[T] {
 	c := *q
 	c.g = q.g.Session(&gorm.Session{})
+	c.orders = slices.Clone(q.orders)
 	return &c
 }
 
@@ -134,6 +136,12 @@ func Value[T, V any](ctx context.Context, q *Query[T], col string) (V, error) {
 // Chunk walks the result in primary-key order, size rows at a time, stopping at the first error.
 // Rows are hydrated like Get (bound, With / WithCount applied).
 func (q *Query[T]) Chunk(ctx context.Context, size int, fn func(rows []T) error) error {
+	return q.ChunkByID(ctx, size, "", fn)
+}
+
+// ChunkByID is Chunk keyed on column instead of the primary key (Eloquent's chunkById). The column
+// must be unique and ascending-comparable; an empty column means the primary key.
+func (q *Query[T]) ChunkByID(ctx context.Context, size int, column string, fn func(rows []T) error) error {
 	if size < 1 {
 		return migro.Newf(migro.QueryFailed, "chunk size must be >= 1, got %d", size)
 	}
@@ -141,9 +149,11 @@ func (q *Query[T]) Chunk(ctx context.Context, size int, fn func(rows []T) error)
 	if err != nil {
 		return err
 	}
-	pk, err := primaryKey(sch)
-	if err != nil {
-		return err
+	pk := column
+	if pk == "" {
+		if pk, err = primaryKey(sch); err != nil {
+			return err
+		}
 	}
 	var last any
 	for {
@@ -188,3 +198,17 @@ func (m *Model[T]) Truncate(ctx context.Context) error {
 	}
 	return wrap(m.db.Gorm.WithContext(ctx).Exec(sql).Error, "truncate")
 }
+
+// ToSQL renders the SELECT this query would run, with its bindings inlined, without running it
+// (Eloquent's toRawSql). Use it for debugging; never feed the result back to the database.
+func (q *Query[T]) ToSQL(ctx context.Context) (string, error) {
+	var rows []T
+	tx := q.clone().g.WithContext(ctx).Session(&gorm.Session{DryRun: true}).Find(&rows)
+	if tx.Error != nil {
+		return "", wrap(tx.Error, "to sql")
+	}
+	return q.db.Gorm.Dialector.Explain(tx.Statement.SQL.String(), tx.Statement.Vars...), nil
+}
+
+// DB returns the database the query runs on.
+func (q *Query[T]) DB() *migro.DB { return q.db }

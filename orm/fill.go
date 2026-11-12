@@ -20,13 +20,19 @@ type (
 	Hidden interface{ Hidden() []string }
 	// Visible, when present, is the only set of columns ToMap / JSON includes ($visible).
 	Visible interface{ Visible() []string }
+	// Defaults returns the values a model starts with when built through Model.Make or CreateFrom
+	// (Eloquent's $attributes). A struct literal is never touched: Go cannot tell a field left at its zero
+	// value from one set to it.
+	Defaults interface{ Defaults() map[string]any }
+	// SerializeAs renames columns and relations in ToMap / JSON: {"created_at": "createdAt"} (Lucid's serializeAs).
+	SerializeAs interface{ SerializeAs() map[string]string }
 	// Appends returns computed values added to ToMap / JSON (Eloquent's $appends).
 	Appends interface{ Appends() map[string]any }
 )
 
 // Fill sets columns (by column or field name) from attrs. Fields outside Fillable, or inside Guarded,
 // fail with MASS_ASSIGNMENT instead of being silently dropped. Models implementing neither are open.
-func (b *BaseModel) Fill(attrs map[string]any) error {
+func (b *Record) Fill(attrs map[string]any) error {
 	m, err := b.bound()
 	if err != nil {
 		return err
@@ -36,7 +42,7 @@ func (b *BaseModel) Fill(attrs map[string]any) error {
 
 // SetAttribute sets one column through its cast (a mutator), ignoring Fillable / Guarded: it is the
 // programmatic counterpart of `$model->column = value`.
-func (b *BaseModel) SetAttribute(column string, v any) error {
+func (b *Record) SetAttribute(column string, v any) error {
 	m, err := b.bound()
 	if err != nil {
 		return err
@@ -45,7 +51,7 @@ func (b *BaseModel) SetAttribute(column string, v any) error {
 }
 
 // GetAttribute returns one column through its cast (an accessor).
-func (b *BaseModel) GetAttribute(column string) (any, error) {
+func (b *Record) GetAttribute(column string) (any, error) {
 	m, err := b.bound()
 	if err != nil {
 		return nil, err
@@ -204,6 +210,14 @@ func toMap(v any, cfg *serializeCfg) (map[string]any, error) {
 			continue
 		}
 		out[key] = kids
+	}
+	if r, ok := m.self.(SerializeAs); ok {
+		for from, to := range r.SerializeAs() {
+			if val, has := out[from]; has && from != to {
+				delete(out, from)
+				out[to] = val
+			}
+		}
 	}
 	return out, nil
 }

@@ -362,17 +362,26 @@ func makeModel(c *call) error {
 	dir := c.dir("path", c.app.ModelsDir)
 	table := pluralize(snake(base))
 	path := filepath.Join(dir, snake(base)+".go")
+	embed := "BaseModel"
+	switch {
+	case c.flags.isTrue("uuid") && c.flags.isTrue("ulid"):
+		return usagef("--uuid and --ulid are mutually exclusive")
+	case c.flags.isTrue("uuid"):
+		embed = "UUIDModel"
+	case c.flags.isTrue("ulid"):
+		embed = "ULIDModel"
+	}
 	src := fmt.Sprintf(`package %s
 
 import "github.com/LouisRiverstone/migro/orm"
 
 // %[2]s maps to the %[3]q table (GORM's default naming).
 type %[2]s struct {
-	orm.BaseModel
+	orm.%[4]s
 	// Name  string
 	// Email string `+"`gorm:\"uniqueIndex\"`"+`
 }
-`, detectPackage(dir, "models"), base, table)
+`, detectPackage(dir, "models"), base, table, embed)
 	if err := writeNew(path, src); err != nil {
 		return err
 	}

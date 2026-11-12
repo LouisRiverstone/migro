@@ -62,6 +62,18 @@ db.WriteDB().Gorm.First(&user, id)   // force the primary (read your own write)
 
 Transactions always use the primary. Replicas can lag, so a read right after a write may be stale; use `WriteDB()` when it matters.
 
+## Sticky reads
+
+`migro.Sticky(ctx)` does that for you per request or job (Laravel's `sticky` option). Reads that run before the first write still use a replica; once a write has run with that context, the rest of its reads go to the primary:
+
+```go
+ctx = migro.Sticky(ctx)               // once, where the request starts
+orm.New[Post](db).Create(ctx, post)   // write
+orm.New[Post](db).Find(ctx, post.ID)  // read: primary, so the new row is there
+```
+
+Pass the returned context to every call of the unit of work. Other contexts are unaffected, and it does nothing without `Config.Replicas`.
+
 ## Sharding
 
 `cluster` routes work across independent databases (for example one per tenant group):

@@ -27,6 +27,13 @@ const (
 	BeforeDelete = "before:delete"
 	AfterDelete  = "after:delete"
 	AfterFind    = "after:find"
+
+	// Emitted by the orm package, not by GORM callbacks.
+	BeforeRestore     = "before:restore"
+	AfterRestore      = "after:restore"
+	BeforeForceDelete = "before:force_delete"
+	AfterForceDelete  = "after:force_delete"
+	BeforeReplicate   = "before:replicate"
 )
 
 type silentKey struct{}

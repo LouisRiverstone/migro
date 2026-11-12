@@ -30,7 +30,7 @@ type Config struct {
 
 	// Replicas are read-only DSNs of the same dialect. Reads go to a replica, writes and
 	// transactions to the primary. Replication lag can make a read right after a write stale;
-	// use DB.WriteDB() to force the primary.
+	// use DB.WriteDB() to force the primary, or migro.Sticky(ctx) to do it after the first write of a request.
 	Replicas []string
 	// ReplicaPolicy is "random" (default) or "round-robin".
 	ReplicaPolicy string
@@ -49,6 +49,8 @@ type DB struct {
 	Dialect dialect.Dialect
 
 	closers []func() error
+	st      *dbState // shared by transactions and WriteDB handles
+	name    string   // set when the database is registered in a Manager
 }
 
 // Open connects using a registered dialect.
@@ -75,12 +77,14 @@ func OpenContext(ctx context.Context, cfg Config) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	gcfg := cfg.Gorm
-	if gcfg == nil {
-		gcfg = &gorm.Config{Logger: silentLogger()}
+	gcfg := &gorm.Config{Logger: silentLogger()}
+	if cfg.Gorm != nil {
+		c := *cfg.Gorm
+		gcfg = &c
 	}
 
-	db := &DB{Dialect: d}
+	db := &DB{Dialect: d, st: newState()}
+	gcfg.Logger = traced(gcfg.Logger, db.st)
 	var dialector gorm.Dialector
 	if pool.advanced() || len(cfg.Replicas) > 0 {
 		h, err := openPool(ctx, d, cfg.DSN, pool)
@@ -122,6 +126,10 @@ func OpenContext(ctx context.Context, cfg Config) (*DB, error) {
 			db.closers = append(db.closers, h.sqlDB.Close)
 			dials = append(dials, d.FromConn(h.conn))
 		}
+		if err := registerSticky(g); err != nil {
+			db.closeAll()
+			return nil, Wrap(ConnectionFailed, err, "register sticky reads")
+		}
 		if err := g.Use(dbresolver.Register(dbresolver.Config{Replicas: dials, Policy: policy})); err != nil {
 			db.closeAll()
 			return nil, Wrap(ConnectionFailed, err, "register replicas")
@@ -154,12 +162,13 @@ func (d *DB) closeAll() {
 
 // WriteDB returns a handle whose queries all go to the primary (read-your-writes).
 func (d *DB) WriteDB() *DB {
-	return &DB{Gorm: d.Gorm.Clauses(dbresolver.Write), Dialect: d.Dialect}
+	return d.WithGorm(d.Gorm.Clauses(dbresolver.Write))
 }
 
 // Adopt adopts an existing *gorm.DB.
 func Adopt(g *gorm.DB, d dialect.Dialect) *DB {
-	db := &DB{Gorm: g, Dialect: d}
+	db := &DB{Gorm: g, Dialect: d, st: newState()}
+	g.Logger = traced(g.Logger, db.st)
 	if sqlDB, err := g.DB(); err == nil {
 		db.closers = append(db.closers, sqlDB.Close)
 	}
@@ -196,6 +205,6 @@ func (d *DB) Ping(ctx context.Context) error {
 // fn receives a *DB bound to the transaction, usable with schema, query, orm and migrate.
 func (d *DB) Transaction(ctx context.Context, fn func(tx *DB) error) error {
 	return d.Gorm.WithContext(ctx).Transaction(func(g *gorm.DB) error {
-		return fn(&DB{Gorm: g, Dialect: d.Dialect})
+		return fn(d.WithGorm(g))
 	})
 }

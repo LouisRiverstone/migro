@@ -44,6 +44,8 @@ type App struct {
 	SeedersDir    string // database/seeders
 	FactoriesDir  string // database/factories
 	ModelsDir     string // app/models
+	ObserversDir  string // app/observers
+	SchemaDir     string // database/schema: where schema:dump writes and migration:run looks for a dump
 
 	// Models are the GORM models migration:diff compares with the database.
 	Models []any
@@ -71,6 +73,8 @@ func (a *App) defaults() {
 	set(&a.SeedersDir, "database/seeders")
 	set(&a.FactoriesDir, "database/factories")
 	set(&a.ModelsDir, "app/models")
+	set(&a.SchemaDir, "database/schema")
+	set(&a.ObserversDir, "app/observers")
 	set(&a.Default, "default")
 	if a.Env == "" {
 		for _, k := range []string{"MIGRO_ENV", "APP_ENV"} {

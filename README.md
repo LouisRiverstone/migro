@@ -119,7 +119,12 @@ migro migration:fresh --seed        # rebuild the database and seed it
 - **Relations** as typed fields: has-one/many, belongs-to, many-to-many with pivot writes, `hasManyThrough`, and the polymorphic family (`MorphTo`, `MorphMany`, `MorphToMany`, ...), with `With`, `WithCount`, `Has`/`WhereHas` and lazy loading
 - **Migrations** like Laravel: timestamped files, batches, locking, `--pretend`, `migration:diff`
 - **Seeders and factories** like Laravel/Lucid: `DatabaseSeeder` with `seed.Call`, `--class`, `--once`, states, sequences, `For`/`With`, `UpdateOrCreateMany` and a built-in faker
-- **Events**, **connection pool options**, **read replicas** and **sharding**
+- **Advanced queries**: `WhereExists`, `WhereJSON`, full-text search, `GroupBy`/`Having`, unions, row locks, `Sole`, cursor pagination, `Cursor`/`Lazy` streaming and relation aggregates (`WithSum`, `WithAvg`, `WithExists`, ...)
+- **Lifecycle**: type-safe observers, `Replicate`, `WasChanged`, quiet saves, default attributes, UUID/ULID keys, `Upsert`, pruning and `Touches`
+- **Strict mode** that fails on lazy loading, query listeners and a query log
+- **Schema dump** that squashes migrations into one SQL file, plus `db:show`, `db:table`, `model:show` and more `make:*` generators
+- **Test helpers** (`dbtest`): database assertions, query counting, `RefreshDatabase`
+- **Events**, **named connections**, **connection pool options**, **read replicas** and **sharding**
 
 PostgreSQL, CockroachDB, Redshift, MySQL, MariaDB, SQLite, SQL Server and Oracle. PostgreSQL, MySQL and SQLite run in CI; the others are unit-tested but not yet verified against live servers.
 

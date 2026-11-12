@@ -84,3 +84,14 @@ func (d *oraDialect) DropForeign(t, name string) string { return d.DropConstrain
 
 // Oracle implicitly commits DDL.
 func (d *oraDialect) TransactionalDDL() bool { return false }
+
+func (d *oraDialect) LockSQL(mode dialect.LockMode) string {
+	if mode == dialect.LockShare {
+		return ""
+	}
+	return "FOR UPDATE"
+}
+
+func (d *oraDialect) JSONExtract(col string, path []string) string {
+	return "JSON_VALUE(" + col + ", '" + dialect.JSONPathString(path) + "')"
+}

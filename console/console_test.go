@@ -301,8 +301,17 @@ func TestGeneratedStubsCompile(t *testing.T) {
 	h.mustRun("make:migration", "add_color_to_widgets_table")
 	h.mustRun("make:seeder", "Widget")
 	h.mustRun("make:model", "Widget")
+	h.mustRun("make:model", "Doc", "--uuid")
+	h.mustRun("make:model", "Note", "--ulid")
+	if code := h.run("make:model", "Both", "--uuid", "--ulid"); code != console.ExitUsage {
+		t.Fatalf("--uuid with --ulid should fail, got %d", code)
+	}
 	// The factory imports the model package of the host module; point it at the model we just made.
 	h.mustRun("make:factory", "Widget", "--model=github.com/LouisRiverstone/migro/console/"+filepath.ToSlash(root)+"/app/models.Widget")
+	h.mustRun("make:observer", "Widget", "--model=github.com/LouisRiverstone/migro/console/"+filepath.ToSlash(root)+"/app/models.Widget")
+	h.mustRun("make:scope", "Featured", "--model=Widget")
+	h.mustRun("make:resource", "Widget")
+	h.mustRun("make:cast", "Money")
 	out, err := exec.Command(goBin, "vet", "./"+root+"/...").CombinedOutput()
 	if err != nil {
 		t.Fatalf("generated code does not compile: %v\n%s", err, out)

@@ -36,8 +36,8 @@ func spec(extra map[string]bool, shorts map[string]string) flagSpec {
 func allCommands() []command {
 	return []command{
 		{name: "migration:run", aliases: []string{"migrate"}, desc: "Run pending migrations",
-			usage: "migration:run [--step] [--pretend] [--database=name] [--force]",
-			flags: spec(map[string]bool{"step": false, "pretend": false}, nil), run: runMigrations},
+			usage: "migration:run [--step] [--pretend] [--seed] [--database=name] [--force]",
+			flags: spec(map[string]bool{"step": false, "pretend": false, "seed": false}, nil), run: runMigrations},
 		{name: "migration:rollback", aliases: []string{"migrate:rollback"}, desc: "Roll back the last batch (or --step=N migrations, or --batch=N)",
 			usage: "migration:rollback [--step=N | --batch=N] [--pretend] [--database=name] [--force]",
 			flags: spec(map[string]bool{"step": true, "batch": true, "pretend": false}, nil), run: rollbackMigrations},
@@ -59,6 +59,19 @@ func allCommands() []command {
 		{name: "migration:diff", desc: "Generate a migration from the differences between your models and the database",
 			usage: "migration:diff [name] [--allow-destructive] [--rename=table.old=new] [--path=dir] [--database=name]",
 			flags: spec(map[string]bool{"allow-destructive": false, "rename": true, "path": true}, nil), run: diffMigration},
+		{name: "schema:dump", desc: "Squash the migrations into one SQL file new databases load instead of replaying them",
+			usage: "schema:dump [--path=dir] [--database=name]",
+			flags: spec(map[string]bool{"path": true}, nil), run: dumpSchema},
+		{name: "db:wipe", desc: "Drop ALL tables",
+			usage: "db:wipe [--database=name] [--force]", flags: spec(nil, nil), run: wipeDatabase},
+		{name: "db:show", desc: "Show the database and its tables",
+			usage: "db:show [--counts] [--database=name]", flags: spec(map[string]bool{"counts": false}, nil), run: showDatabase},
+		{name: "db:table", desc: "Show a table's columns and indexes",
+			usage: "db:table <name> [--database=name]", flags: spec(nil, nil), run: showTable},
+		{name: "model:show", desc: "Show a model's table, columns, relations and behaviours",
+			usage: "model:show <Name> [--database=name]", flags: spec(nil, nil), run: showModel},
+		{name: "model:prune", desc: "Delete the stale rows of every registered Prunable model",
+			usage: "model:prune [--database=name] [--force]", flags: spec(nil, nil), run: pruneModels},
 		{name: "db:seed", desc: "Run database seeders",
 			usage: "db:seed [--class=Name] [--once] [--database=name] [--force]",
 			flags: spec(map[string]bool{"class": true, "once": false}, nil), run: seedDatabase},
@@ -70,9 +83,20 @@ func allCommands() []command {
 		{name: "make:factory", desc: "Create a model factory",
 			usage: "make:factory <Name> [--model=import/path.Type] [--path=dir]",
 			flags: spec(map[string]bool{"model": true, "path": true}, nil), run: makeFactory},
+		{name: "make:observer", desc: "Create a model observer",
+			usage: "make:observer <Name> [--model=import/path.Type] [--path=dir]",
+			flags: spec(map[string]bool{"model": true, "path": true}, nil), run: makeObserver},
+		{name: "make:scope", desc: "Create a local query scope for a model in the models package",
+			usage: "make:scope <Name> --model=Type [--path=dir]",
+			flags: spec(map[string]bool{"model": true, "path": true}, nil), run: makeScope},
+		{name: "make:resource", desc: "Create an API resource for a model in the models package",
+			usage: "make:resource <Name> [--model=Type] [--path=dir]",
+			flags: spec(map[string]bool{"model": true, "path": true}, nil), run: makeResource},
+		{name: "make:cast", desc: "Create a custom attribute cast",
+			usage: "make:cast <Name> [--path=dir]", flags: spec(map[string]bool{"path": true}, nil), run: makeCast},
 		{name: "make:model", desc: "Create a model (-m migration, -f factory, -s seeder, -a all)",
-			usage: "make:model <Name> [-m] [-f] [-s] [-a] [--path=dir]",
-			flags: spec(map[string]bool{"migration": false, "factory": false, "seeder": false, "all": false, "path": true},
+			usage: "make:model <Name> [-m] [-f] [-s] [-a] [--uuid|--ulid] [--path=dir]",
+			flags: spec(map[string]bool{"migration": false, "factory": false, "seeder": false, "all": false, "uuid": false, "ulid": false, "path": true},
 				map[string]string{"m": "migration", "f": "factory", "s": "seeder", "a": "all"}), run: makeModel},
 	}
 }
@@ -94,6 +118,13 @@ func (c *call) migrator(db *migro.DB, conn string, quiet bool) (*migrate.Migrato
 		return nil, err
 	}
 	opts := []migrate.Option{migrate.WithConnection(conn, c.app.Default)}
+	dump, err := c.loadDump(db)
+	if err != nil {
+		return nil, err
+	}
+	if dump != nil {
+		opts = append(opts, migrate.WithDump(*dump))
+	}
 	if !quiet {
 		opts = append(opts, migrate.WithObserver(c.observe))
 	}
@@ -155,7 +186,7 @@ func (c *call) withMigrator(readOnly bool, fn func(m *migrate.Migrator, db *migr
 
 func runMigrations(c *call) error {
 	pretend := c.flags.isTrue("pretend")
-	return c.withMigrator(pretend, func(m *migrate.Migrator, _ *migro.DB) error {
+	return c.withMigrator(pretend, func(m *migrate.Migrator, db *migro.DB) error {
 		res, err := m.Run(c.ctx, migrate.RunOptions{Step: c.flags.isTrue("step"), Pretend: pretend})
 		if err != nil {
 			return err
@@ -166,8 +197,9 @@ func runMigrations(c *call) error {
 		}
 		if pretend {
 			c.printPretend(res)
+			return nil
 		}
-		return nil
+		return c.maybeSeed(db)
 	})
 }
 

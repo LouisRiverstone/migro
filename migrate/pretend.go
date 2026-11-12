@@ -79,5 +79,5 @@ func pretendDB(ctx context.Context, db *migro.DB) (*migro.DB, *recorder) {
 	// with db.Gorm and swapping its ConnPool would silently disable the real database.
 	g := db.Gorm.Session(&gorm.Session{NewDB: true, Context: ctx})
 	g.Statement.ConnPool = rec
-	return &migro.DB{Gorm: g, Dialect: db.Dialect}, rec
+	return db.WithGorm(g), rec
 }

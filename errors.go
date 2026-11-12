@@ -32,6 +32,11 @@ const (
 	UnboundModel       Code = "UNBOUND_MODEL"
 	RelationNotLoaded  Code = "RELATION_NOT_LOADED"
 	CastFailed         Code = "CAST_FAILED"
+
+	LazyLoadingViolation Code = "LAZY_LOADING_VIOLATION"
+	MultipleRecords      Code = "MULTIPLE_RECORDS_FOUND"
+	ConnectionNotFound   Code = "CONNECTION_NOT_FOUND"
+	PruneFailed          Code = "PRUNE_FAILED"
 )
 
 // Error is the single error type returned across migro boundaries.

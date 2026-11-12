@@ -63,3 +63,21 @@ func (d *liteDialect) DropForeign(_, _ string) string       { return "" }
 
 // SQLite cannot ALTER TABLE ADD CONSTRAINT.
 func (d *liteDialect) SupportsAddConstraint() bool { return false }
+
+func (d *liteDialect) LockSQL(dialect.LockMode) string { return "" } // SQLite locks the whole database
+
+func (d *liteDialect) JSONExtract(col string, path []string) string {
+	return "json_extract(" + col + ", '" + dialect.JSONPathString(path) + "')"
+}
+
+func (d *liteDialect) DatePart(col string, part dialect.DatePart) string {
+	switch part {
+	case dialect.PartYear:
+		return "CAST(strftime('%Y', " + col + ") AS INTEGER)"
+	case dialect.PartMonth:
+		return "CAST(strftime('%m', " + col + ") AS INTEGER)"
+	case dialect.PartDay:
+		return "CAST(strftime('%d', " + col + ") AS INTEGER)"
+	}
+	return "date(" + col + ")"
+}

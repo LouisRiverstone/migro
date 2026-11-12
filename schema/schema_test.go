@@ -224,3 +224,35 @@ func TestAlterDropsConstraintsBeforeColumns(t *testing.T) {
 		t.Fatal("slug should be gone")
 	}
 }
+
+func TestFullTextIndexPerDialect(t *testing.T) {
+	build := func(tb *schema.Table) {
+		tb.Increments("id")
+		tb.String("title")
+		tb.Text("body")
+		tb.FullText("title", "body")
+	}
+	cases := map[string]string{
+		"mysql":    "CREATE FULLTEXT INDEX `articles_title_body_fulltext` ON `articles` (`title`, `body`)",
+		"postgres": `USING GIN (to_tsvector('simple', coalesce("title"::text, '') || ' ' || coalesce("body"::text, '')))`,
+	}
+	for name, want := range cases {
+		d, err := dialect.Get(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stmts, err := schema.CreateSQL(d, "articles", build)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := stmts[len(stmts)-1]; !strings.Contains(got, want) {
+			t.Fatalf("%s: got %s want %s", name, got, want)
+		}
+	}
+	for _, name := range []string{"sqlite", "sqlserver", "oracle", "redshift"} {
+		d, _ := dialect.Get(name)
+		if _, err := schema.CreateSQL(d, "articles", build); migro.CodeOf(err) != migro.UnsupportedFeature {
+			t.Fatalf("%s must refuse a full-text index: %v", name, err)
+		}
+	}
+}

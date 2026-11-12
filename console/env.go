@@ -78,7 +78,8 @@ func ConnectionsFromEnv() map[string]Connection {
 }
 
 // FromEnv builds an App for root from .env and the environment. Directories can be overridden with
-// MIGRO_MIGRATIONS_DIR, MIGRO_SEEDERS_DIR, MIGRO_FACTORIES_DIR and MIGRO_MODELS_DIR.
+// MIGRO_MIGRATIONS_DIR, MIGRO_SEEDERS_DIR, MIGRO_FACTORIES_DIR, MIGRO_MODELS_DIR,
+// MIGRO_OBSERVERS_DIR and MIGRO_SCHEMA_DIR.
 func FromEnv(root string) (*App, error) {
 	if err := LoadDotEnv(filepath.Join(root, ".env")); err != nil {
 		return nil, migro.Wrap(migro.InvalidConfig, err, "read .env")
@@ -91,6 +92,8 @@ func FromEnv(root string) (*App, error) {
 		SeedersDir:    os.Getenv("MIGRO_SEEDERS_DIR"),
 		FactoriesDir:  os.Getenv("MIGRO_FACTORIES_DIR"),
 		ModelsDir:     os.Getenv("MIGRO_MODELS_DIR"),
+		ObserversDir:  os.Getenv("MIGRO_OBSERVERS_DIR"),
+		SchemaDir:     os.Getenv("MIGRO_SCHEMA_DIR"),
 		Interactive:   interactive,
 	}, nil
 }

@@ -192,3 +192,98 @@ js, err := orm.JSON(user)
 ## Events
 
 Lifecycle hooks (`BeforeCreate`, `AfterSave`, …) use GORM's own mechanisms. For typed, per-model events and a global event bus see [Events](events.md).
+
+## Change tracking after a save
+
+```go
+user.Name = "Ana"
+_ = user.Save(ctx)
+
+user.WasChanged("name")      // true
+user.WasChanged("email")     // false
+user.GetChanges()            // {"name": "Ana", "updated_at": ...}
+user.WasRecentlyCreated()    // true when that Save inserted the row
+```
+
+`IsDirty` and `Dirty` describe the changes not yet saved; `WasChanged` and `GetChanges` describe the last save.
+
+## Quiet saves
+
+`SaveQuietly` and `DeleteQuietly` run without model events. `SaveWithoutTimestamps` leaves `updated_at` alone, and also skips events and hooks. `IncrementEach` adds a different amount to several columns in one atomic update:
+
+```go
+user.IncrementEach(ctx, map[string]int{"credits": 5, "visits": 1})
+```
+
+## Replicating
+
+```go
+copy, err := orm.Replicate(ctx, post, "slug")   // clear the slug too
+copy.Title += " (copy)"
+_ = copy.Save(ctx)
+```
+
+The copy loses its primary key, timestamps, soft-delete mark, loaded relations and the named columns. `before:replicate` listeners may abort it.
+
+## Comparing models
+
+`orm.Is(a, b)` is true for the same model type and the same non-zero primary key; `orm.IsNot` negates it.
+
+## Default attributes
+
+```go
+func (Post) Defaults() map[string]any { return map[string]any{"status": "draft"} }
+
+post, _ := posts.Make(map[string]any{"title": "Hi"})   // Status == "draft"
+```
+
+Defaults apply in `Make` and `CreateFrom`, before the attributes you pass. A struct literal is never touched: Go cannot tell a field left at its zero value from one set to it.
+
+## UUID and ULID keys
+
+Embed `orm.UUIDModel` (UUID version 7, time ordered) or `orm.ULIDModel` instead of `BaseModel`. They carry the same timestamps and every instance method (`Save`, `Delete`, `Refresh`, `Touch`, relations), with a string key:
+
+```go
+type Document struct {
+    orm.UUIDModel
+    Title string
+}
+
+type Archive struct {
+    orm.SoftDeleteULIDModel   // soft deletes too; also SoftDeleteUUIDModel
+    Name string
+}
+```
+
+The key is generated on insert when empty; one you set is kept. Foreign keys that point at these models are plain `string` columns. `orm.NewUUID()` and `orm.NewULID()` generate the values directly, and `make:model Document --uuid` (or `--ulid`) scaffolds the model.
+
+`orm.UUIDKey` and `orm.ULIDKey` are the bare key columns, for a model that brings its own timestamps. Embed `orm.Record` next to them to get the instance methods back.
+
+## Bulk writes
+
+```go
+posts.Upsert(ctx, rows, []string{"slug"}, []string{"title", "views"})   // insert, or update these columns on conflict
+posts.Upsert(ctx, rows, []string{"slug"}, nil)                          // update every column except the keys
+posts.InsertOrIgnore(ctx, rows)                                         // skip rows that violate a unique key
+model, exists, err := posts.FirstOrNew(ctx, Post{Slug: "hi"}, Post{Title: "Hi"})   // not saved when missing
+```
+
+`uniqueBy` needs a unique index. MySQL ignores it and uses whichever unique key conflicts. PostgreSQL, MySQL and SQLite use their own `ON CONFLICT` form. SQL Server and Oracle have no such clause, so `Upsert` writes a `MERGE` (in batches, filling UUID keys and timestamps as `Create` would); `InsertOrIgnore` is refused there with `UNSUPPORTED_FEATURE`, because GORM would drop the clause and run a plain insert. Redshift has no upsert and is refused for both. The `MERGE` statements are checked by rendering tests, not against a live SQL Server or Oracle.
+
+## Pruning models
+
+Say which rows are stale and delete them in bulk (Eloquent's `Prunable`):
+
+```go
+func (Session) Prunable(q *orm.Query[Session]) *orm.Query[Session] {
+    return q.Where("expires_at < ?", time.Now())
+}
+
+n, err := orm.New[Session](db).Prune(ctx)
+```
+
+`Prunable` deletes row by row, for good (soft-deleted rows included), firing model events and calling a `Pruning(ctx) error` hook if the model has one. `MassPrunable` deletes with one statement and no events. Register models with `orm.RegisterPrunable[Session]("sessions")` and `migro model:prune` (or `orm.PruneAll`) prunes them all.
+
+## Primary keys that are strings
+
+`Find`, `FindMany` and `Destroy` name the primary key column themselves, so string and UUID keys work. GORM alone would read a non-numeric string passed to `First` as raw SQL.
