@@ -1,0 +1,39 @@
+{% if site.docs_versions_url %}
+<div class="version-picker">
+  <label for="version-select" class="visually-hidden">Documentation version</label>
+  <select id="version-select" aria-label="Documentation version" data-current="{{ site.docs_version }}" data-base="{{ site.baseurl }}" data-url="{{ site.docs_versions_url }}">
+    <option>{{ site.docs_version }}</option>
+  </select>
+</div>
+<style>
+  .version-picker { display: flex; align-items: center; margin-left: auto; padding-right: 1rem; }
+  .version-picker select { font: inherit; font-size: .8rem; padding: .25rem .5rem; border: 1px solid #ccc; border-radius: 4px; background: transparent; color: inherit; max-width: 11rem; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+<script>
+  (function () {
+    var sel = document.getElementById('version-select');
+    if (!sel) return;
+    var current = sel.dataset.current, base = sel.dataset.base;
+    fetch(sel.dataset.url).then(function (r) { return r.json(); }).then(function (data) {
+      sel.textContent = '';
+      data.versions.forEach(function (v) {
+        var o = document.createElement('option');
+        o.value = v.path;
+        o.textContent = v.label;
+        o.selected = v.name === current;
+        sel.appendChild(o);
+      });
+    }).catch(function () { /* keep the single option: the picker is a convenience */ });
+    sel.addEventListener('change', function () {
+      var target = sel.value.replace(/\/$/, '');
+      var here = location.pathname;
+      var rest = here.indexOf(base) === 0 ? here.slice(base.length) : '/';
+      // Keep the same page when the other version has it, else land on that version's home.
+      fetch(target + rest, { method: 'HEAD' }).then(function (r) {
+        location.href = r.ok ? target + rest + location.hash : target + '/';
+      }).catch(function () { location.href = target + '/'; });
+    });
+  })();
+</script>
+{% endif %}

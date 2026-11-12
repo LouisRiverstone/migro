@@ -1,7 +1,7 @@
 # Only needed to preview the docs locally: `cd docs && bundle install && bundle exec jekyll serve`
 source "https://rubygems.org"
 
-gem "github-pages", group: :jekyll_plugins
+gem "github-pages", ">= 230", group: :jekyll_plugins
 gem "jekyll-remote-theme"
 gem "jekyll-relative-links"
 gem "webrick"

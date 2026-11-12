@@ -20,7 +20,7 @@ Inside your Go module:
 go get github.com/LouisRiverstone/migro@latest
 ```
 
-There are no tagged releases yet, so `@latest` resolves to the newest commit on `main`. To pin a specific commit, use `go get github.com/LouisRiverstone/migro@<commit-sha>`.
+`@latest` resolves to the newest tagged release. To pin one, use `go get github.com/LouisRiverstone/migro@v0.1.0`; to try unreleased work, use `@main` or a commit (`@<commit-sha>`). Releases are listed on [GitHub](https://github.com/LouisRiverstone/migro/releases).
 
 ## Pick a database driver
 
