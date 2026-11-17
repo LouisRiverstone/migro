@@ -142,6 +142,9 @@ func (d *relDef) aggregateInto(ctx context.Context, db *migro.DB, owners []refle
 	if len(keys) > 0 {
 		var rows []map[string]any
 		ownerCol := q(ownerRaw)
+		if fn == "AVG" && db.Dialect.Name() == "sqlserver" {
+			col = "CAST(" + col + " AS float)" // AVG over an integer column truncates there
+		}
 		err := g.Select(ownerCol+" AS k, "+fn+"("+col+") AS v").
 			Where(ownerCol+" IN ?", keys).Group(ownerRaw).Find(&rows).Error
 		if err != nil {

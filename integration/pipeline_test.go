@@ -222,6 +222,9 @@ func TestReferentialActions(t *testing.T) {
 	})
 
 	t.Run("CASCADE walks a self-referencing tree", func(t *testing.T) {
+		if db.Dialect.Name() == "sqlserver" {
+			t.Skip("SQL Server cannot cascade through a self-referencing key")
+		}
 		mustExec(t, db, "DELETE FROM categories WHERE id = 1") // Tech -> Databases
 		if n := count(t, db, "categories"); n != 0 {
 			t.Fatalf("whole tree should be gone, %d left", n)
