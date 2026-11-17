@@ -331,6 +331,12 @@ func (f *Foreign) sql(d dialect.Dialect, t *Table) (string, error) {
 		if !fkActions[up] {
 			return "", migro.Newf(migro.InvalidSchema, "foreign key on %q: invalid action %q", t.name, a[1])
 		}
+		if d.Name() == "sqlserver" && f.refTable == t.name && (up == "CASCADE" || up == "SET NULL" || up == "SET DEFAULT") {
+			return "", migro.Newf(migro.UnsupportedFeature, "sqlserver cannot %s on a self-referencing foreign key (%q): use NO ACTION and delete children first", strings.ToLower(a[0]+" "+up), t.name)
+		}
+		if up == "RESTRICT" && d.Name() == "sqlserver" {
+			up = "NO ACTION" // SQL Server has no RESTRICT; NO ACTION also refuses the change
+		}
 		s += " " + a[0] + " " + up
 	}
 	return s, nil
@@ -484,6 +490,10 @@ func (t *Table) compileAlter(d dialect.Dialect) ([]string, error) {
 		out = append(out, fmt.Sprintf("ALTER TABLE %s %s %s", q, d.AddColumnKeyword(), s))
 	}
 	for _, c := range t.dropColumns {
+		if cd, ok := d.(dialect.ColumnDropper); ok {
+			out = append(out, cd.DropColumnSQL(t.name, c)...)
+			continue
+		}
 		out = append(out, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", q, d.Quote(c)))
 	}
 	for _, r := range t.renames {

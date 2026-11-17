@@ -90,7 +90,7 @@ func TestQueryLogListenAndToSQL(t *testing.T) {
 
 	sql, err := users.Query().Where("name = ?", "ana").Limit(3).ToSQL(ctx)
 	ok(t, err)
-	if !strings.Contains(sql, "ana") || !strings.Contains(sql, "LIMIT") || strings.Contains(sql, "?") {
+	if !strings.Contains(sql, "ana") || (!strings.Contains(sql, "LIMIT") && !strings.Contains(sql, "FETCH NEXT")) || strings.Contains(sql, "?") {
 		t.Fatalf("to sql: %s", sql)
 	}
 	if len(db.QueryLog()) != 0 {

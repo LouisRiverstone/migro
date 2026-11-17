@@ -395,3 +395,55 @@ func TestDotEnvAndConnections(t *testing.T) {
 		t.Fatalf("missing .env is fine: %v", err)
 	}
 }
+
+func TestMakeModelFromTable(t *testing.T) {
+	h := newHarness(t)
+	db, err := h.app.Connections["default"](context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ddl := range []string{
+		`CREATE TABLE blog_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME, updated_at DATETIME, deleted_at DATETIME, user_id BIGINT NOT NULL, title VARCHAR(255) NOT NULL, body TEXT, meta JSON, views INTEGER)`,
+		`CREATE TABLE audit (code VARCHAR(10) PRIMARY KEY, happened DATETIME NOT NULL)`,
+	} {
+		if err := db.Gorm.Exec(ddl).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = db.Close()
+
+	h.mustRun("make:model", "BlogPost", "--from-table=blog_posts")
+	src, err := os.ReadFile(filepath.Join(h.app.Root, "app", "models", "blog_post.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	squash := func(b []byte) string { return strings.Join(strings.Fields(string(b)), " ") }
+	for _, want := range []string{"orm.SoftDeleteModel", "UserID int64", "Title string", "Body *string", "Views *int32", `"encoding/json"`} {
+		if !strings.Contains(squash(src), want) {
+			t.Errorf("missing %q in:\n%s", want, src)
+		}
+	}
+	for _, unwanted := range []string{"CreatedAt", "DeletedAt", "TableName"} {
+		if strings.Contains(string(src), unwanted) {
+			t.Errorf("unexpected %q in:\n%s", unwanted, src)
+		}
+	}
+
+	h.mustRun("make:model", "Audit", "--from-table=audit")
+	src, _ = os.ReadFile(filepath.Join(h.app.Root, "app", "models", "audit.go"))
+	for _, want := range []string{"Code string", "primaryKey", "Happened time.Time"} {
+		if !strings.Contains(squash(src), want) {
+			t.Errorf("missing %q in:\n%s", want, src)
+		}
+	}
+	if strings.Contains(string(src), "orm.") {
+		t.Errorf("a table without the BaseModel shape must not embed it:\n%s", src)
+	}
+
+	if code := h.run("make:model", "Ghost", "--from-table=nope"); code != console.ExitError {
+		t.Errorf("unknown table exit = %d", code)
+	}
+	if code := h.run("make:model", "X", "--from-table=audit", "-m"); code != console.ExitUsage {
+		t.Errorf("--from-table with -m exit = %d", code)
+	}
+}

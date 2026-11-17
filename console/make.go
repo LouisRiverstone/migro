@@ -382,6 +382,18 @@ type %[2]s struct {
 	// Email string `+"`gorm:\"uniqueIndex\"`"+`
 }
 `, detectPackage(dir, "models"), base, table, embed)
+	if from := c.flags.str("from-table"); from != "" {
+		if embed != "BaseModel" || c.flags.isTrue("migration") || c.flags.isTrue("all") {
+			return usagef("--from-table cannot be combined with --uuid, --ulid, -m or -a: the table already exists")
+		}
+		cols, err := c.readTableColumns(from)
+		if err != nil {
+			return err
+		}
+		if src, err = renderModelFromTable(detectPackage(dir, "models"), base, from, cols); err != nil {
+			return err
+		}
+	}
 	if err := writeNew(path, src); err != nil {
 		return err
 	}

@@ -62,7 +62,11 @@ func (q *Query[T]) Sum(ctx context.Context, col string) (float64, error) {
 	return q.aggregate(ctx, "COALESCE(SUM("+q.db.Dialect.Quote(col)+"), 0)")
 }
 func (q *Query[T]) Avg(ctx context.Context, col string) (float64, error) {
-	return q.aggregate(ctx, "COALESCE(AVG("+q.db.Dialect.Quote(col)+"), 0)")
+	c := q.db.Dialect.Quote(col)
+	if q.db.Dialect.Name() == "sqlserver" {
+		c = "CAST(" + c + " AS float)" // AVG over an integer column truncates there
+	}
+	return q.aggregate(ctx, "COALESCE(AVG("+c+"), 0)")
 }
 
 // Min and Max keep the column's own type (nil when no row matches).
@@ -102,11 +106,24 @@ func asFloat(v any) float64 {
 
 func (q *Query[T]) scalar(ctx context.Context, expr string) (any, error) {
 	var row map[string]any
-	if err := q.clone().g.WithContext(ctx).Select(expr + " AS v").Take(&row).Error; err != nil {
+	// Scan, not Take: an aggregate always returns one row, and a LIMIT forces SQL Server to add an
+	// ORDER BY on a column the aggregate does not group by.
+	if err := q.clone().g.WithContext(ctx).Select(expr + " AS v").Scan(&row).Error; err != nil {
 		return nil, wrap(err, "aggregate")
 	}
-	if b, ok := row["v"].([]byte); ok { // some drivers return decimals as bytes
-		return string(b), nil
+	switch v := row["v"].(type) {
+	case []byte: // some drivers return decimals as bytes
+		return string(v), nil
+	case int8:
+		return int64(v), nil
+	case int16:
+		return int64(v), nil
+	case int32: // the driver picks the column's width; callers should not depend on it
+		return int64(v), nil
+	case int:
+		return int64(v), nil
+	case float32:
+		return float64(v), nil
 	}
 	return row["v"], nil
 }

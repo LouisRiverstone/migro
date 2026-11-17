@@ -126,7 +126,7 @@ migro migration:fresh --seed        # rebuild the database and seed it
 - **Test helpers** (`dbtest`): database assertions, query counting, `RefreshDatabase`
 - **Events**, **named connections**, **connection pool options**, **read replicas** and **sharding**
 
-PostgreSQL, CockroachDB, Redshift, MySQL, MariaDB, SQLite, SQL Server and Oracle. PostgreSQL, MySQL and SQLite run in CI; the others are unit-tested but not yet verified against live servers.
+PostgreSQL, CockroachDB, Redshift, MySQL, MariaDB, SQLite, SQL Server and Oracle. PostgreSQL, MySQL and SQLite run in CI as blocking jobs. MariaDB, CockroachDB and SQL Server run in non-blocking jobs while they are verified; Redshift and Oracle are unit-tested only.
 
 ## Documentation
 
