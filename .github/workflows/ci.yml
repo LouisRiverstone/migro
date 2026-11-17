@@ -8,7 +8,7 @@ jobs:
   sqlite:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - name: gofmt
@@ -27,7 +27,7 @@ jobs:
   vulncheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The latest patch release: go.mod pins the minimum Go, and the standard library fixes come with the toolchain.
       - uses: actions/setup-go@v5
         with: { go-version: stable }
@@ -45,7 +45,7 @@ jobs:
       MIGRO_TEST_DIALECT: postgres
       MIGRO_TEST_DSN: host=localhost user=postgres password=postgres dbname=migro port=5432 sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - run: go test -race -p 1 -count=1 ./...
@@ -62,7 +62,7 @@ jobs:
       MIGRO_TEST_DIALECT: mysql
       MIGRO_TEST_DSN: root:root@tcp(127.0.0.1:3306)/migro?parseTime=true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - run: go test -race -p 1 -count=1 ./...
@@ -82,7 +82,7 @@ jobs:
       MIGRO_TEST_DIALECT: mariadb
       MIGRO_TEST_DSN: root:root@tcp(127.0.0.1:3306)/migro?parseTime=true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - run: go test -race -p 1 -count=1 ./...
@@ -94,7 +94,7 @@ jobs:
       MIGRO_TEST_DIALECT: cockroachdb
       MIGRO_TEST_DSN: host=localhost user=root dbname=defaultdb port=26257 sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - name: start cockroachdb
@@ -122,7 +122,7 @@ jobs:
       MIGRO_TEST_DIALECT: sqlserver
       MIGRO_TEST_DSN: sqlserver://sa:Migro_Passw0rd@localhost:1433?database=migro
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - name: create the test database # master holds system tables the suite would try to drop
