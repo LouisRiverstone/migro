@@ -115,6 +115,15 @@ func categoryParentAction(db *migro.DB) string {
 	return "CASCADE"
 }
 
+// mustExecID runs an INSERT that names the identity column. SQL Server only allows that inside IDENTITY_INSERT.
+func mustExecID(t *testing.T, db *migro.DB, table, sql string, args ...any) {
+	t.Helper()
+	if db.Dialect.Name() == "sqlserver" {
+		sql = "SET IDENTITY_INSERT " + table + " ON; " + sql + "; SET IDENTITY_INSERT " + table + " OFF"
+	}
+	mustExec(t, db, sql, args...)
+}
+
 func mustExec(t *testing.T, db *migro.DB, sql string, args ...any) {
 	t.Helper()
 	if err := db.Gorm.Exec(sql, args...).Error; err != nil {
@@ -200,13 +209,13 @@ func TestConstraintsRejectBadData(t *testing.T) {
 	mustExec(t, db, "INSERT INTO taggables (tag_id, taggable_id, taggable_type) VALUES (1, 1, 'video')")
 
 	// defaults filled in by the schema
-	mustExec(t, db, "INSERT INTO products (id, sku, name, price) VALUES (91, 'SKU-D', 'Defaults', 5)")
+	mustExecID(t, db, "products", "INSERT INTO products (id, sku, name, price) VALUES (91, 'SKU-D', 'Defaults', 5)")
 	var stock int
 	g.Table("products").Select("stock").Where("id = 91").Scan(&stock)
 	if stock != 0 {
 		t.Errorf("stock default: %d", stock)
 	}
-	mustExec(t, db, "INSERT INTO orders (id, user_id, total) VALUES (91, 1, 1)")
+	mustExecID(t, db, "orders", "INSERT INTO orders (id, user_id, total) VALUES (91, 1, 1)")
 	var status string
 	g.Table("orders").Select("status").Where("id = 91").Scan(&status)
 	if status != "pending" {
