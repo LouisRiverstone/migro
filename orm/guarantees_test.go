@@ -54,18 +54,28 @@ func countQueries(db *migro.DB, fn func()) int {
 
 // ---- identifiers are never spliced into SQL ----------------------------------------------
 
-// outsideQuotes drops every quoted run, so what is left is SQL the library itself wrote.
+// outsideQuotes drops every quoted run ("x", `x`, 'x', [x]), honouring the doubled closing character
+// that escapes itself, so what is left is SQL the library itself wrote.
 func outsideQuotes(sql string) string {
 	var b strings.Builder
-	var open rune
-	for _, r := range sql {
+	rs := []rune(sql)
+	var closing rune
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
 		switch {
-		case open != 0:
-			if r == open {
-				open = 0
+		case closing != 0:
+			if r != closing {
+				continue
 			}
+			if i+1 < len(rs) && rs[i+1] == closing { // escaped: stays inside the quote
+				i++
+				continue
+			}
+			closing = 0
 		case r == '"' || r == '`' || r == '\'':
-			open = r
+			closing = r
+		case r == '[':
+			closing = ']'
 		default:
 			b.WriteRune(r)
 		}

@@ -102,7 +102,9 @@ func asFloat(v any) float64 {
 
 func (q *Query[T]) scalar(ctx context.Context, expr string) (any, error) {
 	var row map[string]any
-	if err := q.clone().g.WithContext(ctx).Select(expr + " AS v").Take(&row).Error; err != nil {
+	// Scan, not Take: an aggregate always returns one row, and a LIMIT forces SQL Server to add an
+	// ORDER BY on a column the aggregate does not group by.
+	if err := q.clone().g.WithContext(ctx).Select(expr + " AS v").Scan(&row).Error; err != nil {
 		return nil, wrap(err, "aggregate")
 	}
 	if b, ok := row["v"].([]byte); ok { // some drivers return decimals as bytes

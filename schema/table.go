@@ -331,6 +331,9 @@ func (f *Foreign) sql(d dialect.Dialect, t *Table) (string, error) {
 		if !fkActions[up] {
 			return "", migro.Newf(migro.InvalidSchema, "foreign key on %q: invalid action %q", t.name, a[1])
 		}
+		if up == "RESTRICT" && d.Name() == "sqlserver" {
+			up = "NO ACTION" // SQL Server has no RESTRICT; NO ACTION also refuses the change
+		}
 		s += " " + a[0] + " " + up
 	}
 	return s, nil

@@ -85,8 +85,12 @@ func TestSoleFirstWhereLocks(t *testing.T) {
 		t.Fatalf("FirstWhere: %+v", u)
 	}
 	// SQLite ignores row locks, so the query still runs. Get, not Count: PostgreSQL refuses a lock with an aggregate.
-	if got := must(users.Query().LockForUpdate().SharedLock().Get(ctx)); len(got) != 3 {
-		t.Fatalf("locks: %d", len(got))
+	got, err := users.Query().LockForUpdate().SharedLock().Get(ctx)
+	if migro.CodeOf(err) == migro.UnsupportedFeature {
+		return // databases without row locks refuse instead of silently ignoring the request
+	}
+	if err != nil || len(got) != 3 {
+		t.Fatalf("locks: %d %v", len(got), err)
 	}
 }
 

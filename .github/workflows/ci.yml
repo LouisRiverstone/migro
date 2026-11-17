@@ -28,8 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The latest patch release: go.mod pins the minimum Go, and the standard library fixes come with the toolchain.
       - uses: actions/setup-go@v5
-        with: { go-version-file: go.mod }
+        with: { go-version: stable }
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
   postgres:
@@ -119,9 +120,13 @@ jobs:
           --health-interval 10s --health-retries 20
     env:
       MIGRO_TEST_DIALECT: sqlserver
-      MIGRO_TEST_DSN: sqlserver://sa:Migro_Passw0rd@localhost:1433?database=master
+      MIGRO_TEST_DSN: sqlserver://sa:Migro_Passw0rd@localhost:1433?database=migro
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
+      - name: create the test database # master holds system tables the suite would try to drop
+        run: |
+          id=$(docker ps -q --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest)
+          docker exec "$id" /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P Migro_Passw0rd -Q "CREATE DATABASE migro"
       - run: go test -p 1 -count=1 ./...
