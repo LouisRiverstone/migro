@@ -192,7 +192,11 @@ func TestConstraintsRejectBadData(t *testing.T) {
 	}
 
 	// the same title is fine for another user, and the same morph id for another type
-	mustExec(t, db, "INSERT INTO posts (id, user_id, slug, title, published) VALUES (93, 2, 'hello-again', 'Hello DB', ?)", true)
+	if db.Dialect.Name() == "sqlserver" { // an identity column refuses explicit ids
+		mustExec(t, db, "INSERT INTO posts (user_id, slug, title, published) VALUES (2, 'hello-again', 'Hello DB', ?)", true)
+	} else {
+		mustExec(t, db, "INSERT INTO posts (id, user_id, slug, title, published) VALUES (93, 2, 'hello-again', 'Hello DB', ?)", true)
+	}
 	mustExec(t, db, "INSERT INTO taggables (tag_id, taggable_id, taggable_type) VALUES (1, 1, 'video')")
 
 	// defaults filled in by the schema

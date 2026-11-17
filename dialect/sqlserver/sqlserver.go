@@ -107,10 +107,13 @@ func (d *msDialect) DatePart(col string, part dialect.DatePart) string {
 func (d *msDialect) DropColumnSQL(table, column string) []string {
 	lit := func(s string) string { return "N'" + strings.ReplaceAll(s, "'", "''") + "'" }
 	return []string{
-		"DECLARE @dc sysname; " +
+		// EXEC cannot take a function call as its argument, so the statement is built in a variable first.
+		"DECLARE @dc sysname, @stmt nvarchar(max); " +
 			"SELECT @dc = dc.name FROM sys.default_constraints dc JOIN sys.columns c ON c.default_object_id = dc.object_id " +
 			"WHERE dc.parent_object_id = OBJECT_ID(" + lit(d.Quote(table)) + ") AND c.name = " + lit(column) + "; " +
-			"IF @dc IS NOT NULL EXEC('ALTER TABLE " + strings.ReplaceAll(d.Quote(table), "'", "''") + " DROP CONSTRAINT ' + QUOTENAME(@dc));",
+			"IF @dc IS NOT NULL BEGIN " +
+			"SET @stmt = N'ALTER TABLE " + strings.ReplaceAll(d.Quote(table), "'", "''") + " DROP CONSTRAINT ' + QUOTENAME(@dc); " +
+			"EXEC (@stmt); END",
 		"ALTER TABLE " + d.Quote(table) + " DROP COLUMN " + d.Quote(column),
 	}
 }
