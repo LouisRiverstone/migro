@@ -4,6 +4,8 @@ All notable changes are listed here. The project is pre-1.0: minor versions may 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-17
+
 ### Added
 - `migro make:model Name --from-table=users` generates a model from a live table.
 - `migro --version`.
