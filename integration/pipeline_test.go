@@ -107,6 +107,14 @@ func mustFail(t *testing.T, what string, err error) {
 	}
 }
 
+// categoryParentAction is the ON DELETE action the categories migration picks for this database.
+func categoryParentAction(db *migro.DB) string {
+	if db.Dialect.Name() == "sqlserver" {
+		return "NO ACTION"
+	}
+	return "CASCADE"
+}
+
 func mustExec(t *testing.T, db *migro.DB, sql string, args ...any) {
 	t.Helper()
 	if err := db.Gorm.Exec(sql, args...).Error; err != nil {
@@ -171,9 +179,9 @@ func TestConstraintsRejectBadData(t *testing.T) {
 		"profile of a ghost user":       g.Exec("INSERT INTO profiles (id, user_id) VALUES (91, 99)").Error,
 		"duplicate pivot row":           g.Exec("INSERT INTO role_user (user_id, role_id) VALUES (1, 1)").Error,
 		"pivot to a ghost role":         g.Exec("INSERT INTO role_user (user_id, role_id) VALUES (1, 99)").Error,
-		"duplicate post slug":           g.Exec("INSERT INTO posts (id, user_id, slug, title, published) VALUES (90, 2, 'hello-db', 'other', TRUE)").Error,
-		"composite unique (user,title)": g.Exec("INSERT INTO posts (id, user_id, slug, title, published) VALUES (91, 1, 'new-slug', 'Hello DB', TRUE)").Error,
-		"post with ghost category":      g.Exec("INSERT INTO posts (id, user_id, category_id, slug, title, published) VALUES (92, 1, 99, 's', 't', TRUE)").Error,
+		"duplicate post slug":           g.Exec("INSERT INTO posts (id, user_id, slug, title, published) VALUES (90, 2, 'hello-db', 'other', ?)", true).Error,
+		"composite unique (user,title)": g.Exec("INSERT INTO posts (id, user_id, slug, title, published) VALUES (91, 1, 'new-slug', 'Hello DB', ?)", true).Error,
+		"post with ghost category":      g.Exec("INSERT INTO posts (id, user_id, category_id, slug, title, published) VALUES (92, 1, 99, 's', 't', ?)", true).Error,
 		"duplicate order line":          g.Exec("INSERT INTO order_items (order_id, line_no, product_id, quantity, unit_price) VALUES (1, 1, 2, 1, 1)").Error,
 		"order line of ghost order":     g.Exec("INSERT INTO order_items (order_id, line_no, product_id, quantity, unit_price) VALUES (99, 1, 1, 1, 1)").Error,
 		"duplicate taggable":            g.Exec("INSERT INTO taggables (tag_id, taggable_id, taggable_type) VALUES (1, 1, 'post')").Error,
@@ -184,7 +192,7 @@ func TestConstraintsRejectBadData(t *testing.T) {
 	}
 
 	// the same title is fine for another user, and the same morph id for another type
-	mustExec(t, db, "INSERT INTO posts (id, user_id, slug, title, published) VALUES (93, 2, 'hello-again', 'Hello DB', TRUE)")
+	mustExec(t, db, "INSERT INTO posts (id, user_id, slug, title, published) VALUES (93, 2, 'hello-again', 'Hello DB', ?)", true)
 	mustExec(t, db, "INSERT INTO taggables (tag_id, taggable_id, taggable_type) VALUES (1, 1, 'video')")
 
 	// defaults filled in by the schema
@@ -662,7 +670,7 @@ func TestPretendRendersEveryMigrationWithoutTouchingTheDatabase(t *testing.T) {
 	sql := strings.NewReplacer(`"`, "", "`", "", "[", "", "]", "").Replace(strings.Join(all, "\n"))
 	for _, want := range []string{
 		"CREATE TABLE countries", "CREATE TABLE order_items", "CREATE INDEX comments_commentable_type_commentable_id_index",
-		"CREATE INDEX orders_status_placed_at_index", "FOREIGN KEY (parent_id) REFERENCES categories (id) ON DELETE CASCADE",
+		"CREATE INDEX orders_status_placed_at_index", "FOREIGN KEY (parent_id) REFERENCES categories (id) ON DELETE " + categoryParentAction(db),
 		"PRIMARY KEY (tag_id, taggable_id, taggable_type)",
 	} {
 		if !strings.Contains(sql, want) {

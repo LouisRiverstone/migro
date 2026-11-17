@@ -79,3 +79,9 @@ func JSONPathString(path []string) string {
 	}
 	return b.String()
 }
+
+// ColumnDropper is implemented by dialects whose DROP COLUMN needs more than one statement.
+type ColumnDropper interface {
+	// DropColumnSQL returns the statements that drop table.column, in order.
+	DropColumnSQL(table, column string) []string
+}

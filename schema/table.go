@@ -490,6 +490,10 @@ func (t *Table) compileAlter(d dialect.Dialect) ([]string, error) {
 		out = append(out, fmt.Sprintf("ALTER TABLE %s %s %s", q, d.AddColumnKeyword(), s))
 	}
 	for _, c := range t.dropColumns {
+		if cd, ok := d.(dialect.ColumnDropper); ok {
+			out = append(out, cd.DropColumnSQL(t.name, c)...)
+			continue
+		}
 		out = append(out, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", q, d.Quote(c)))
 	}
 	for _, r := range t.renames {

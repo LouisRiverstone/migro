@@ -256,3 +256,28 @@ func TestFullTextIndexPerDialect(t *testing.T) {
 		}
 	}
 }
+
+func TestDropColumnPerDialect(t *testing.T) {
+	drop := func(tb *schema.Table) { tb.DropColumn("archived") }
+	for name, want := range map[string]string{
+		"postgres":  `ALTER TABLE "posts" DROP COLUMN "archived"`,
+		"sqlserver": `DROP COLUMN [archived]`,
+	} {
+		d, err := dialect.Get(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stmts, err := schema.AlterSQL(d, "posts", drop)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sql := strings.Join(stmts, "\n")
+		if !strings.Contains(sql, want) {
+			t.Errorf("%s: want %q in:\n%s", name, want, sql)
+		}
+		hasDefaultDrop := strings.Contains(sql, "sys.default_constraints")
+		if (name == "sqlserver") != hasDefaultDrop {
+			t.Errorf("%s: dropping the DEFAULT constraint first is a SQL Server need only:\n%s", name, sql)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package sqlserver
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/LouisRiverstone/migro/dialect"
 	"gorm.io/driver/sqlserver"
@@ -99,4 +100,17 @@ func (d *msDialect) DatePart(col string, part dialect.DatePart) string {
 		return "DAY(" + col + ")"
 	}
 	return "CAST(" + col + " AS DATE)"
+}
+
+// DropColumnSQL first drops the column's DEFAULT constraint: SQL Server names it itself and refuses to
+// drop a column that still has one.
+func (d *msDialect) DropColumnSQL(table, column string) []string {
+	lit := func(s string) string { return "N'" + strings.ReplaceAll(s, "'", "''") + "'" }
+	return []string{
+		"DECLARE @dc sysname; " +
+			"SELECT @dc = dc.name FROM sys.default_constraints dc JOIN sys.columns c ON c.default_object_id = dc.object_id " +
+			"WHERE dc.parent_object_id = OBJECT_ID(" + lit(d.Quote(table)) + ") AND c.name = " + lit(column) + "; " +
+			"IF @dc IS NOT NULL EXEC('ALTER TABLE " + strings.ReplaceAll(d.Quote(table), "'", "''") + " DROP CONSTRAINT ' + QUOTENAME(@dc));",
+		"ALTER TABLE " + d.Quote(table) + " DROP COLUMN " + d.Quote(column),
+	}
 }
