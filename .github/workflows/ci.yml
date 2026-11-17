@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - name: gofmt
         run: |
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The latest patch release: go.mod pins the minimum Go, and the standard library fixes come with the toolchain.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version: stable }
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
@@ -46,7 +46,7 @@ jobs:
       MIGRO_TEST_DSN: host=localhost user=postgres password=postgres dbname=migro port=5432 sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - run: go test -race -p 1 -count=1 ./...
 
@@ -63,7 +63,7 @@ jobs:
       MIGRO_TEST_DSN: root:root@tcp(127.0.0.1:3306)/migro?parseTime=true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - run: go test -race -p 1 -count=1 ./...
 
@@ -83,7 +83,7 @@ jobs:
       MIGRO_TEST_DSN: root:root@tcp(127.0.0.1:3306)/migro?parseTime=true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - run: go test -race -p 1 -count=1 ./...
 
@@ -95,7 +95,7 @@ jobs:
       MIGRO_TEST_DSN: host=localhost user=root dbname=defaultdb port=26257 sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - name: start cockroachdb
         run: |
@@ -123,7 +123,7 @@ jobs:
       MIGRO_TEST_DSN: sqlserver://sa:Migro_Passw0rd@localhost:1433?database=migro
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with: { go-version-file: go.mod }
       - name: create the test database # master holds system tables the suite would try to drop
         run: |
