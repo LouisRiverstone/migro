@@ -27,7 +27,7 @@ jobs:
           bundler-cache: true
           working-directory: docs
       - run: docs/build-versions.sh . _site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with: { path: _site }
 
   deploy:
