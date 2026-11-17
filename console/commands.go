@@ -95,8 +95,8 @@ func allCommands() []command {
 		{name: "make:cast", desc: "Create a custom attribute cast",
 			usage: "make:cast <Name> [--path=dir]", flags: spec(map[string]bool{"path": true}, nil), run: makeCast},
 		{name: "make:model", desc: "Create a model (-m migration, -f factory, -s seeder, -a all)",
-			usage: "make:model <Name> [-m] [-f] [-s] [-a] [--uuid|--ulid] [--path=dir]",
-			flags: spec(map[string]bool{"migration": false, "factory": false, "seeder": false, "all": false, "uuid": false, "ulid": false, "path": true},
+			usage: "make:model <Name> [-m] [-f] [-s] [-a] [--uuid|--ulid] [--from-table=name] [--database=name] [--path=dir]",
+			flags: spec(map[string]bool{"from-table": true, "database": true, "migration": false, "factory": false, "seeder": false, "all": false, "uuid": false, "ulid": false, "path": true},
 				map[string]string{"m": "migration", "f": "factory", "s": "seeder", "a": "all"}), run: makeModel},
 	}
 }

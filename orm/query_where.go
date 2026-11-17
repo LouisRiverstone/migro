@@ -158,11 +158,19 @@ func (q *Query[T]) Sole(ctx context.Context) (*T, error) {
 
 // ---- grouping, distinct, union ----------------------------------------------------------------
 
-// GroupBy groups by columns; combine it with Select and Having for aggregates.
+// GroupBy groups by columns (each one is quoted as an identifier); combine it with Select and Having
+// for aggregates. Use GroupByRaw to group by an expression.
 func (q *Query[T]) GroupBy(cols ...string) *Query[T] {
 	for _, c := range cols {
-		q.g = q.g.Group(c) // GORM quotes the name itself
+		q.g = q.g.Clauses(clause.GroupBy{Columns: []clause.Column{{Name: q.db.Dialect.Quote(c), Raw: true}}})
 	}
+	return q
+}
+
+// GroupByRaw groups by a SQL expression such as "DATE(created_at)". The text is sent as written, so
+// never build it from user input.
+func (q *Query[T]) GroupByRaw(expr string) *Query[T] {
+	q.g = q.g.Group(expr)
 	return q
 }
 

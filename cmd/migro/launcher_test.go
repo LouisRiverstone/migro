@@ -67,8 +67,27 @@ func TestFindRootAndNeedsRunner(t *testing.T) {
 		t.Error("no go.mod should fail")
 	}
 	for cmd, want := range map[string]bool{"make:migration": false, "help": false, "migration:run": true, "db:seed": true, "migrate": true} {
-		if needsRunner(cmd) != want {
+		if needsRunner([]string{cmd}) != want {
 			t.Errorf("needsRunner(%q) != %v", cmd, want)
 		}
+	}
+	if !needsRunner([]string{"make:model", "User", "--from-table=users"}) {
+		t.Error("make:model --from-table reads the database and needs the runner")
+	}
+}
+
+func TestVersion(t *testing.T) {
+	old := version
+	defer func() { version = old }()
+	version = "v9.9.9"
+	if got := resolveVersion(); got != "v9.9.9" {
+		t.Errorf("release version = %q", got)
+	}
+	version = ""
+	if got := resolveVersion(); got == "" {
+		t.Error("must fall back to build info or dev")
+	}
+	if code := run([]string{"--version"}); code != 0 {
+		t.Errorf("--version exit = %d", code)
 	}
 }

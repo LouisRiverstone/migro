@@ -77,6 +77,8 @@ posts.Query().Select("user_id").GroupBy("user_id").Having("COUNT(*) > ?", 3).Get
 posts.Query().Distinct("user_id").Get(ctx)
 ```
 
+`GroupBy` quotes each name as an identifier. To group by an expression, use `GroupByRaw("DATE(created_at)")`; its text is sent as written, so never build it from user input.
+
 ## Unions
 
 ```go

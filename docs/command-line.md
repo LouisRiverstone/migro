@@ -88,7 +88,7 @@ func main() {
 | `db:seed` | Run seeders. Starts from `DatabaseSeeder` when you registered one (it calls the others with `seed.Call`), otherwise runs every seeder by name. `--class=UserSeeder` runs one; `--once` skips those that already ran. |
 | `make:seeder <Name>` | New seeder. |
 | `make:factory <Name>` | New factory. `--model=example.com/app/models.User` names the model (default: `<module>/app/models`). |
-| `make:model <Name>` | New model. `-m` also creates its migration, `-f` a factory, `-s` a seeder, `-a` all three. `--uuid` or `--ulid` embeds a string-key model. |
+| `make:model <Name>` | New model. `-m` also creates its migration, `-f` a factory, `-s` a seeder, `-a` all three. `--uuid` or `--ulid` embeds a string-key model. `--from-table=name` reads the live table and writes the struct for you (column types, nullable pointers, `gorm` tags); it needs a database connection and cannot be combined with `-m`, `-a`, `--uuid` or `--ulid`. |
 | `help` | List commands. |
 
 Every command accepts `--database=<name>` to pick a connection, and `--force` / `--no-interaction` (`-n`). Exit codes: `0` ok, `1` error, `2` bad usage.

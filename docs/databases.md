@@ -11,17 +11,34 @@ description: What is verified on each database, and per-database behavior and li
 | Database | Dialect name | Verified how | Transactional DDL |
 |---|---|---|---|
 | SQLite | `sqlite` | Full test suite in CI (blocking) | yes |
-| PostgreSQL | `postgres` | Full suite in a CI job that does not block merges yet | yes |
-| MySQL | `mysql` | Full suite in a CI job that does not block merges yet | no |
-| MariaDB | `mariadb` | Generated SQL unit-tested; never run on a live server | no |
-| CockroachDB | `cockroachdb` | Generated SQL unit-tested; never run on a live server | no (schema changes are not wrapped) |
+| PostgreSQL | `postgres` | Full suite in a CI job (blocking) | yes |
+| MySQL | `mysql` | Full suite in a CI job (blocking) | no |
+| MariaDB | `mariadb` | Full suite in a non-blocking CI job, results pending | no |
+| CockroachDB | `cockroachdb` | Full suite in a non-blocking CI job, results pending | no (schema changes are not wrapped) |
 | Redshift | `redshift` | Generated SQL unit-tested; never run on a live server | yes |
-| SQL Server | `sqlserver` | Generated SQL unit-tested; never run on a live server | yes |
+| SQL Server | `sqlserver` | Full suite in a non-blocking CI job, results pending | yes |
 | Oracle | `oracle` | Generated SQL unit-tested; never run on a live server | no |
 
 "Never run on a live server" means the SQL migro produces is checked against expected fragments, but nobody has executed it against the real database yet. Expect to find rough edges there, and please report them or [help verify](contributing.md#running-tests-against-a-real-database).
 
 "Transactional DDL" decides whether a migration runs inside a transaction (see [Migrations](migrations.md#behavior-to-know)). Where it is `no`, a migration that fails halfway can leave partial changes, so keep migrations small.
+
+## Feature support
+
+Every dialect handles the schema builder, `With`/`WhereHas`, aggregates, pagination and casts. These are the places where it differs:
+
+| Database | Row locks | JSON paths | Full-text | `Upsert` | `InsertOrIgnore` |
+|---|---|---|---|---|---|
+| PostgreSQL | update, share | yes | yes | `ON CONFLICT` | yes |
+| CockroachDB | update, share | yes | yes | `ON CONFLICT` | yes |
+| Redshift | no | yes | no | no | no |
+| MySQL | update, share | yes | yes | `ON DUPLICATE KEY` | yes |
+| MariaDB | update, share | yes | yes | `ON DUPLICATE KEY` | yes |
+| SQLite | no (writes lock the file) | yes | no | `ON CONFLICT` | yes |
+| SQL Server | no | yes | no | `MERGE` | no, use `Upsert` |
+| Oracle | update only | yes | no | `MERGE` | no, use `Upsert` |
+
+"No" means the call returns an `UNSUPPORTED_FEATURE` error instead of running something wrong. Check the code with `migro.CodeOf(err)`. Native enums exist on MySQL and MariaDB only; elsewhere `Enum` is a string with a `CHECK`.
 
 ## Per-database notes
 

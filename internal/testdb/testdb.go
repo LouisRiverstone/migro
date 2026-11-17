@@ -11,6 +11,7 @@ import (
 	_ "github.com/LouisRiverstone/migro/dialect/mysql"
 	_ "github.com/LouisRiverstone/migro/dialect/postgres"
 	_ "github.com/LouisRiverstone/migro/dialect/sqlite"
+	_ "github.com/LouisRiverstone/migro/dialect/sqlserver"
 )
 
 func Open(t testing.TB) *migro.DB {
