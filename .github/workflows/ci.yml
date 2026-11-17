@@ -31,7 +31,7 @@ jobs:
       # The latest patch release: go.mod pins the minimum Go, and the standard library fixes come with the toolchain.
       - uses: actions/setup-go@v5
         with: { go-version: stable }
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   postgres:
     runs-on: ubuntu-latest
