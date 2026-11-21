@@ -23,7 +23,9 @@ migro db:seed
 | Piece | What it gives you |
 |---|---|
 | [Schema builder](schema-builder.md) | `t.String("email").Unique()`, indexes, `ForeignID(...).Constrained()`, `Morphs(...)`, one definition for every database |
-| [Query builder](query-builder.md) | Knex-style `query.Table(db, "users").Where(...).Get(ctx)` for tables without a model |
+| [Database: getting started](connecting.md) | `migro.Open`, DSNs for eight databases, raw SQL, several connections, query events |
+| [Query builder](query-builder.md) | `query.Table(db, "users")` for tables without a model, and the full model query: where variants, joins, unions, locks, full-text |
+| [Pagination](pagination.md) | `Paginate`, `SimplePaginate` and `CursorPaginate`, with Laravel-style JSON |
 | [Models](models.md) | Eloquent and Lucid style: `orm.New[User](db)`, instance `Save`/`Delete`, dirty tracking, mass assignment, serialization, aggregates |
 | [Relations](relations.md) | Typed relation fields (`HasMany[Post]`, `BelongsToMany[Role]`, `MorphTo`, ...), `With`/`WithCount`/`Has`, pivot `Attach`/`Sync`, morph map |
 | [Query scopes](query-scopes.md) | Reusable `Apply(Published, By(1))` local scopes and model-level global scopes |
@@ -32,7 +34,7 @@ migro db:seed
 | [Collections](collections.md) | `Filter`, `KeyBy`, `GroupBy`, `Load`, `Fresh` on every multi-row result |
 | [Migrations](migrations.md) | Files like `20260101120000_create_users_table.go` with `Up` and `Down`, batches, locking, `--pretend` |
 | [Command line](command-line.md) | `make:*`, `migration:*`, `db:seed`, production prompt, several connections |
-| [Seeders and factories](seeding.md) | Lucid-style factories with states and relations, environment-aware seeders |
+| [Seeding](seeding.md) and [Factories](factories.md) | `DatabaseSeeder`, environment-aware seeders; factories with states, sequences and relations |
 | [Events](events.md) | An event bus plus `before:create`, `after:update` and other model lifecycle events |
 | [Pool, replicas, sharding](scaling.md) | Knex-style pool options, read replicas, key-based sharding |
 | [Schema diff](schema-diff.md) | Generate a migration from the difference between your models and the database |
@@ -42,6 +44,9 @@ migro db:seed
 PostgreSQL, CockroachDB, Redshift, MySQL, MariaDB, SQLite (pure Go), SQL Server and Oracle (pure Go). Each is a separate import, so you only compile the driver you use. See [Database notes](databases.md) for what is verified against live servers and what is not.
 
 ## Where to start
+
+The guide follows Laravel's Database and Eloquent documentation section by section; [Coming from Laravel](coming-from-laravel.md#laravels-docs-page-by-page) maps each Laravel page to its migro page.
+
 
 1. [Installation](installation.md): requirements and the two things to install.
 2. [Getting started](getting-started.md): a small project from an empty folder to a seeded database, about ten minutes.

@@ -21,7 +21,7 @@ Resources differ from [serialization](serialization.md) in one way that matters:
 
 ## Generating resources
 
-There is no generator; a resource is one variable. Put it next to the model, or in a package of its own for the API layer:
+`migro make:resource User --model=User` writes a starting file in the models package. A resource is one variable, so you can also write it by hand, next to the model or in a package of its own for the API layer:
 
 ```go
 var UserResource = orm.NewResource(func(u *User, r *orm.R) {
@@ -225,3 +225,27 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 ## Testing resources
 
 A resource is a function of a model, so assert on its output. `orm/resource_test.go` covers the builder methods, `Fail` and the wrapping rules without a database; `integration/resources_test.go` covers `WhenLoaded` against real eager loads, nested resources, pagination meta and links, and empty pages.
+
+## Coming from Laravel
+
+| Laravel | migro |
+|---|---|
+| `php artisan make:resource UserResource` | `migro make:resource User` |
+| `JsonResource::toArray($request)` | the function passed to `orm.NewResource` |
+| `new UserResource($user)`, `$user->toResource()` | `UserResource.Make(user)` |
+| `UserResource::collection($users)`, `toResourceCollection()` | `UserResource.Collection(users)` |
+| a `ResourceCollection` class with its own `links` or `meta` | `Additional(...)` on the collection call |
+| `PostResource::collection($this->posts)` inside a resource | `PostResource.List(...)` inside `WhenLoaded` |
+| `$this->when`, `whenHas`, `whenNotNull` | `r.When(cond, key, value)` |
+| `$this->mergeWhen` | `r.MergeWhen` |
+| `$this->whenLoaded('posts')` | `r.WhenLoaded("Posts", fn)` |
+| `whenCounted('posts')`, `whenAggregated` | `r.When(u.Extra("posts_count") != nil, "posts_count", u.Extra("posts_count"))` |
+| `whenPivotLoaded` | `r.When(m.Extra("pivot_active") != nil, ...)` |
+| `JsonResource::withoutWrapping()`, `$wrap` | `WithoutWrapping()`, `Wrap("users")` per resource |
+| `additional([...])`, `with($request)` | `Additional(map)` |
+| `User::paginate()->toResourceCollection()` | `UserResource.Paginated(page, baseURL)` |
+| `paginationInformation()` | `Additional` on top of `Paginated`, or your own envelope |
+| `#[PreserveKeys]` | build a map from `Map` calls |
+| `response()->header(...)`, `withResponse` | set headers on your `http.ResponseWriter` |
+| JSON:API resources | not included; shape `type`, `id`, `attributes` with a resource |
+

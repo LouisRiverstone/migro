@@ -21,7 +21,7 @@ description: What is verified on each database, and per-database behavior and li
 
 "Never run on a live server" means the SQL migro produces is checked against expected fragments, but nobody has executed it against the real database yet. Expect to find rough edges there, and please report them or [help verify](contributing.md#running-tests-against-a-real-database).
 
-"Transactional DDL" decides whether a migration runs inside a transaction (see [Migrations](migrations.md#behavior-to-know)). Where it is `no`, a migration that fails halfway can leave partial changes, so keep migrations small.
+"Transactional DDL" decides whether a migration runs inside a transaction (see [Migrations](migrations.md#migration-behavior)). Where it is `no`, a migration that fails halfway can leave partial changes, so keep migrations small.
 
 ## Feature support
 

@@ -255,6 +255,43 @@ Return plain `error`s; migro wraps them as `CAST_FAILED` with the column name. R
 
 The last row matters for hashed and encrypted columns: a seeder that writes `User{Password: "x"}` stores `x` in plain text. Seed through `CreateFrom` or `SetAttribute`.
 
+## Coming from Laravel's casts
+
+| Laravel cast | migro |
+|---|---|
+| `boolean`, `integer`, `float`, `double`, `real` | the field's Go type; `CastBool`, `CastInt`, `CastFloat` to coerce incoming strings |
+| `string` | a `string` field |
+| `date`, `datetime`, `immutable_*`, `timestamp` | a `time.Time` field; `CastDate(layout)` for string input and output |
+| `decimal:<precision>` | a `string` or a decimal type of your choice, or a custom cast like `moneyCast` above |
+| `array`, `json`, `object`, `collection`, `AsArrayObject`, `AsCollection` | `JSONColumn[T]` (typed) or `CastJSON()` ([below](#array-and-json-casting)) |
+| `encrypted`, `encrypted:array`... | `CastEncrypted(key)`, on a text column |
+| `hashed` | `CastHashed()` |
+| a backed enum, `AsEnumCollection` | a named string type plus `CastEnum(values...)` |
+| `AsStringable`, `AsUri`, `AsFluent`, `AsVector`, `AsBinary` | Go types: `string`, `*url.URL` through a custom cast, `[]byte` |
+
+### Array and JSON casting
+
+Laravel's `array` and `AsCollection` casts turn a JSON column into a PHP array. In migro, choose by how well you know the shape:
+
+- `orm.JSONColumn[T]` when you know it: the field is a typed `T`, and you change it with plain Go ([Typed JSON columns](#typed-json-columns)). Laravel's `$user->options['key'] = $value` is `user.Options.Data["key"] = value`, and it works, since the field is a real map.
+- `orm.CastJSON()` on a `string` column when you do not: maps and slices at the edges, text in the field ([JSON text columns](#json-text-columns)).
+
+A JSON column is written as a whole. Laravel's `$user->update(['options->enabled' => true])` is "load, change `Data`, save".
+
+### Other Laravel features
+
+| Laravel | In migro |
+|---|---|
+| accessors (`Attribute::make(get: ...)`) | `CastFunc{OnGet: ...}`, or a Go method on the model |
+| mutators (`Attribute::make(set: ...)`) | `CastFunc{OnSet: ...}` |
+| value objects built from several columns | an `Appends()` value for output, and a Go method that builds the object |
+| accessor caching, `withoutObjectCaching` | not needed: fields hold real values |
+| custom cast classes (`make:cast`, `CastsAttributes`) | a type with `Get` and `Set`; `migro make:cast Money` writes one |
+| inbound-only casts (`CastsInboundAttributes`) | `CastFunc` with only `OnSet` |
+| cast parameters (`AsHash::class.':sha256'`) | constructor arguments: `CastEncrypted(key)`, `CastHashedCost(12)` |
+| `mergeCasts`, query-time `withCasts` | the `Casts()` map is per model; convert query results yourself |
+| castables (`Castable::castUsing`) | a function that returns the cast for a type |
+
 ## Testing casts
 
 Casts are plain values, so unit tests need no database (`orm/cast_test.go`). The integration suite (`integration/casting_test.go`) checks what really reaches the table: a hash instead of the password, ciphertext instead of the token, an enum rejected before the `INSERT`, dates round-tripped, and typed JSON saved through `Save`. It runs on SQLite, PostgreSQL and MySQL.

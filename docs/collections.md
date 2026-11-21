@@ -168,6 +168,45 @@ js, err = users.JSON(orm.MakeHidden("email"), orm.DateFormat("2006-01-02"))
 
 Same options as [serialization](serialization.md#temporarily-changing-visibility). For API shapes use a [resource](resources.md): `UserResource.Collection(users)`.
 
+## Laravel's methods
+
+| Eloquent collection | migro |
+|---|---|
+| `contains($key)` | `Contains(id)` |
+| `find($key)`, `findOrFail` | `Find(id)` (nil when absent; check it for the "or fail") |
+| `only`, `except` | `Only(ids...)`, `Except(ids...)` |
+| `modelKeys()` | `ModelKeys()` |
+| `load`, `loadMissing` | `Load`, `LoadMissing` |
+| `fresh($with)` | `Fresh(ctx)`, then `Load` for relations |
+| `unique()` | `Unique("id")` |
+| `diff($other)`, `intersect($other)` | `Except(other.ModelKeys()...)`, `Only(other.ModelKeys()...)` |
+| `partition(fn)` | `Filter(fn)` and `Reject(fn)` |
+| `toQuery()` | `orm.New[T](db).Query().WhereIn("id", keys)` with `ModelKeys()` |
+| `makeVisible`, `makeHidden`, `append`, `setVisible` | serialization options on `ToMaps` and `JSON` ([Serialization](serialization.md)) |
+| `map`, `reduce`, `pluck` | `orm.MapTo`, `orm.Reduce`, `Pluck` / `orm.PluckAs` |
+| `keyBy`, `groupBy` | `KeyBy`, `GroupBy` |
+
+Laravel's base collection has dozens of other methods (`sortBy`, `chunk`, `sum`...). A collection is a slice, so use the `slices` package and plain loops for those: `slices.SortFunc(users, func(a, b User) int { return strings.Compare(a.Name, b.Name) })`.
+
+### Eloquent collection conversion
+
+`MapTo`, `Pluck` and `Reduce` return plain values, not collections, as Eloquent returns a base collection when the items are no longer models.
+
+## Custom collections
+
+Laravel lets a model return its own collection class (`#[CollectedBy]`). In Go, define a type over the collection and convert where you need it:
+
+```go
+type Users orm.Collection[User]
+
+func (us Users) Admins() Users {
+    return Users(orm.Collection[User](us).Filter(func(u *User) bool { return u.Role == "admin" }))
+}
+
+list, _ := orm.New[User](db).All(ctx)
+admins := Users(list).Admins()
+```
+
 ## Collections and relationships
 
 A many relation hands out a collection too, so the helpers work on related models:

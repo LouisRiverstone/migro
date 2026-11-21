@@ -8,6 +8,33 @@ description: Eloquent, Lucid and artisan equivalents in migro.
 
 migro follows Eloquent's and Lucid's names, so most code translates one to one. Where Go forces a difference, it is listed below.
 
+<details open markdown="block">
+  <summary>Table of contents</summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
+## Laravel's docs, page by page
+
+The guide follows the Database and Eloquent sections of [Laravel's documentation](https://laravel.com/docs) (13.x), in the same order and with the same section names. Each page also says what has no counterpart, and what to do instead.
+
+| Laravel page | migro page |
+|---|---|
+| Database: Getting Started | [Database: getting started](connecting.md), [Transactions](transactions.md), [Pool, replicas, sharding](scaling.md) |
+| Database: Query Builder | [Query builder](query-builder.md) |
+| Database: Pagination | [Pagination](pagination.md) |
+| Database: Migrations | [Migrations](migrations.md), [Schema builder](schema-builder.md), [Schema dump](schema-dump.md) |
+| Database: Seeding | [Seeding](seeding.md) |
+| Eloquent: Getting Started | [Models](models.md), [Query scopes](query-scopes.md), [Events](events.md), [Strict mode](strict-mode.md) |
+| Eloquent: Relationships | [Relations](relations.md) |
+| Eloquent: Collections | [Collections](collections.md) |
+| Eloquent: Mutators & Casting | [Mutators and casting](mutators-casting.md) |
+| Eloquent: API Resources | [Resources](resources.md) |
+| Eloquent: Serialization | [Serialization](serialization.md) |
+| Eloquent: Factories | [Factories](factories.md) |
+| Database: Redis, MongoDB | not part of migro |
+
 ## Models and queries
 
 | Eloquent / Lucid | migro |

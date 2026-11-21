@@ -159,6 +159,22 @@ enc.Encode(m)
 
 Serialization starts from "everything except what is hidden", so adding a column to the table adds it to the output. A resource starts from "nothing except what I list", so it cannot leak a new column by accident.
 
+## Coming from Laravel
+
+| Eloquent | migro |
+|---|---|
+| `$model->toArray()`, `attributesToArray()` | `orm.ToMap(m)` (relations only when loaded) |
+| `$model->toJson()`, `(string) $model`, returning a model from a route | `orm.JSON(m)` |
+| `JSON_PRETTY_PRINT` | `json.MarshalIndent` of `ToMap` |
+| `#[Hidden]`, `#[Visible]` | `Hidden()`, `Visible()` |
+| `makeVisible`, `makeHidden` | `orm.MakeVisible`, `orm.MakeHidden` on one call |
+| `mergeVisible`, `mergeHidden`, `setVisible`, `setHidden` | the same options; the model's own lists never change |
+| `#[Appends]` with an accessor | `Appends()` |
+| `append`, `setAppends`, `withoutAppends` at run time | a resource, or `ToMap` and edit the map |
+| `serializeDate()` | `orm.DateFormat(layout)` |
+| `'birthday' => 'date:Y-m-d'` | `CastDate("2006-01-02")` on the column |
+| relations as snake_case keys | the same, from the field name; `SerializeAs()` renames them |
+
 ## Testing serialization
 
 `integration/serialization_test.go` covers hidden columns, `MakeVisible`/`MakeHidden` being per call, hidden winning, `DateFormat` at the root and in relations, extras, and collection output as a JSON array.

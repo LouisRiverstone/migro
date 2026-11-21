@@ -22,6 +22,14 @@ A scope is a reusable piece of a query. It is how you give a name to `published 
 
 Both are plain Go, so the compiler checks the model type and your editor completes the names.
 
+## Generating scopes
+
+```
+migro make:scope Popular --model=Post
+```
+
+writes a local scope for `Post` in the models package, ready to fill in. Global scopes are a method on the model, so there is nothing to generate.
+
 ## Local scopes
 
 A local scope is any function from a query to a query, for the model it filters:
@@ -135,6 +143,27 @@ Soft deletes are separate: `WithTrashed()` and `OnlyTrashed()` control `deleted_
 ### Scopes and errors
 
 A global scope returning the `*gorm.DB` unchanged is a no-op. If it calls `g.AddError(...)`, the query fails with that error, wrapped as `QUERY_FAILED`.
+
+### Combining scopes with "or"
+
+Scopes are joined with `AND`. To combine two with `OR`, write the condition in parentheses inside a scope, so it cannot escape the rest of the query or a global scope:
+
+```go
+func PopularOrActive(q *orm.Query[User]) *orm.Query[User] {
+    return q.Where("(votes > ? OR active = ?)", 100, true)
+}
+```
+
+### Laravel features without a counterpart
+
+| Laravel | In migro |
+|---|---|
+| `#[Scope]` methods called as `User::popular()` | a function applied with `Apply(Popular)` |
+| `#[ScopedBy([AncientScope::class])]`, `addGlobalScope(new AncientScope)` | the model's `GlobalScopes()` |
+| anonymous global scopes | every global scope has a name, so it can be removed |
+| `withoutGlobalScopesExcept([...])` | `WithoutGlobalScope` with the names to drop |
+| pending attributes (`withAttributes`) | set the fields on the model you create |
+| `afterQuery` callbacks | process the result of `Get` |
 
 ## Choosing between them
 

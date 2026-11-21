@@ -1,10 +1,10 @@
 ---
-title: Seeders and factories
+title: Seeding
 nav_order: 14
-description: Laravel and Lucid style seeders, DatabaseSeeder, factories.
+description: "Write seeders, call them from a DatabaseSeeder, use factories, mute model events, run them once or per environment."
 ---
 
-# Seeders and factories
+# Seeding
 
 <details open markdown="block">
   <summary>Table of contents</summary>
@@ -15,81 +15,68 @@ description: Laravel and Lucid style seeders, DatabaseSeeder, factories.
 
 ## Introduction
 
-migro can seed your database with test or default data using seed classes. Factories generate realistic models for tests and seeders. Both mirror Laravel's *Database: Seeding* and *Eloquent: Factories*.
+migro can fill your database with data using seeders. Seeders live in `database/seeders` (`MIGRO_SEEDERS_DIR`). A `DatabaseSeeder` is the entry point: it calls the other seeders, in the order you choose.
 
-## Defining model factories
-
-```go
-users := seed.Define(func(f *seed.Faker) User {
-    return User{Name: f.Name(), Email: f.Email()}
-}).
-    State("admin", func(u *User) { u.Role = "admin" }).
-    Relation("posts", func(ctx context.Context, db *migro.DB, u *User, n int, f *seed.Faker) error {
-        for range n {
-            if err := db.Gorm.Create(&Post{UserID: u.ID, Title: f.Sentence()}).Error; err != nil { return err }
-        }
-        return nil
-    })
-
-u, err := users.Make()                                             // built, not saved
-list, err := users.CreateMany(ctx, db, 10)                         // saved; all-or-nothing
-admin, err := users.Apply("admin").With("posts", 3).Create(ctx, db)
-fixed, err := users.Merge(func(u *User) { u.Name = "Fixed" }).Seed(42).Make() // reproducible
-```
-
-### Factory states, sequences and parents
-
-More Laravel-style helpers:
-
-```go
-users.Sequence(                                                  // model i gets fns[i % len]
-    func(i int, u *User) { u.Role = "admin" },
-    func(i int, u *User) { u.Role = "editor" },
-).MakeMany(4)
-
-users.Parent("team", func(ctx context.Context, db *migro.DB, u *User, f *seed.Faker) error {
-    team, err := teams.Create(ctx, db)
-    u.TeamID = team.ID
-    return err
-})
-users.For("team").CreateMany(ctx, db, 3)                          // each user gets a new team first
-
-users.AfterMaking(func(u *User) { u.Email = strings.ToLower(u.Email) })   // runs for Make and Create
-```
-
-Models returned by `Create` / `CreateMany` are bound to the database, so `user.Posts.Create(...)` and `user.Save(ctx)` work on them. Inside a `Relation` callback the model is a plain struct: call `orm.Bind(db, u)` first to use relation fields.
-
-`Merge`, `Apply`, `With`, `Seed`, `Sequence` and `For` return copies, so a shared factory is never mutated. `After(fn)` registers a hook that runs after each create.
-
-The faker is deterministic for a given seed. It offers `Name`, `FirstName`, `LastName`, `Email` (reserved `example.*` domains), `Username`, `Word`, `Words`, `Sentence`, `Paragraph`, `Int`, `Float`, `Bool`, `Pick`, `UUID` and `Date`.
+Models built from structs are not subject to mass assignment protection, so seeders can set any field, like Laravel's, which disables that protection while seeding.
 
 ## Writing seeders
 
-A seeder is a type with a `Run` method, registered like a migration. `migro make:seeder User` creates it:
+```
+migro make:seeder UserSeeder
+```
+
+creates `database/seeders/user_seeder.go`. A seeder is a type with a `Run` method, registered when the package loads. `db:seed` calls `Run`; insert data with the query builder or with models:
 
 ```go
 // database/seeders/user_seeder.go
+package seeders
+
 func init() { seed.Register(&UserSeeder{}) }
 
 type UserSeeder struct{}
 
 func (UserSeeder) Run(ctx context.Context, db *migro.DB) error {
-    // idempotent, like Lucid's updateOrCreateMany
-    users, err := orm.New[User](db).UpdateOrCreateMany(ctx, []string{"email"}, []User{
-        {Email: "ana@example.com", Name: "Ana"},
+    hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+    if err != nil {
+        return err
+    }
+    return query.Table(db, "users").Insert(ctx, query.Row{
+        "name":     seed.NewFaker(time.Now().UnixNano()).Name(),
+        "email":    "admin@example.com",
+        "password": string(hash),
     })
-    if err != nil { return err }
-    _, err = users[0].Posts.Create(ctx, map[string]any{"title": "Hello"})   // relations work in seeders
-    return err
 }
-
-// optional: limit where it runs
-func (UserSeeder) Environments() []string { return []string{"development", "staging"} }
 ```
 
-### The DatabaseSeeder
+Laravel injects dependencies into `run()` from the container. In Go, give the seeder fields and register a value that has them: `seed.Register(&UserSeeder{Mailer: mailer})`.
 
-Registered seeders run in name order, which ignores foreign keys. Laravel's answer is a `DatabaseSeeder` that calls the others; migro does the same with `seed.Call`:
+{: .note }
+Without `--once`, seeders run every time you call `db:seed`, as Lucid's do. Make them idempotent: `UpdateOrCreateMany` (below) inserts or updates by key, so a second run changes nothing.
+
+```go
+users, err := orm.New[User](db).UpdateOrCreateMany(ctx, []string{"email"}, []User{
+    {Email: "ana@example.com", Name: "Ana"},
+    {Email: "bob@example.com", Name: "Bob"},
+})
+_, err = users[0].Posts.Create(ctx, map[string]any{"title": "Hello"}) // relations work in seeders
+```
+
+### Using model factories
+
+Writing every row by hand is tedious. [Factories](factories.md) generate them:
+
+```go
+func (UserSeeder) Run(ctx context.Context, db *migro.DB) error {
+    _, err := factories.UserFactory().With("posts", 1).CreateMany(ctx, db, 50)
+    return err
+}
+```
+
+creates 50 users, each with one post.
+
+### Calling additional seeders
+
+Registered seeders run in name order, which ignores foreign keys. As in Laravel, a `DatabaseSeeder` calls the others in the right order with `seed.Call`:
 
 ```go
 type DatabaseSeeder struct{}
@@ -97,27 +84,63 @@ type DatabaseSeeder struct{}
 func init() { seed.Register(&DatabaseSeeder{}) }
 
 func (DatabaseSeeder) Run(ctx context.Context, db *migro.DB) error {
-    return seed.Call(ctx, db, &CountrySeeder{}, &UserSeeder{}, &PostSeeder{})
+    return seed.Call(ctx, db, &CountrySeeder{}, &UserSeeder{}, &PostSeeder{}, &CommentSeeder{})
 }
 ```
 
-`seed.Call` stops at the first error and names the seeder that failed. Because the whole `DatabaseSeeder` runs in one transaction, a failure in the third seeder rolls back the first two.
+`seed.Call` stops at the first error and names the seeder that failed. The whole `DatabaseSeeder` runs in one transaction, so a failure in the third seeder rolls back the first two.
 
-### Running seeders
+### Muting model events
+
+`seed.WithoutEvents()` mutes [model events](events.md) while seeding (Laravel's `WithoutModelEvents`), including in the seeders `seed.Call` runs:
+
+```go
+r := seed.NewRunner(db, seed.WithoutEvents())
+```
+
+### Limiting seeders to environments
+
+A seeder can say where it runs:
+
+```go
+func (DemoDataSeeder) Environments() []string { return []string{"development", "staging"} }
+```
+
+A seeder with no `Environments` runs everywhere **except production**; list `"production"` to allow it there. The environment comes from `MIGRO_ENV`, then `APP_ENV`, then `development`.
+
+### SQL seed files
+
+Seed data kept as SQL loads with `seed.FromFS(embeddedFS, "seeders")`, one seeder per `.sql` file.
+
+## Running seeders
 
 ```
-migro db:seed                      # DatabaseSeeder if registered, otherwise every seeder by name
-migro db:seed --class=UserSeeder   # one
-migro db:seed --once               # skip seeders that already ran (tracked in migro_seeds)
-migro migration:fresh --seed       # rebuild the database and seed it
+migro db:seed                          # DatabaseSeeder if registered, otherwise every seeder by name
+migro db:seed --class=UserSeeder       # one seeder
+migro db:seed --once                   # skip the seeders that already ran (tracked in migro_seeds)
+migro migration:fresh --seed           # drop every table, migrate, seed
+migro migration:refresh --seed
 ```
 
-From code: `r := seed.NewRunner(db, seed.Once()); r.AddRegistered(); r.Seed(ctx)`, or `r.RunOnly(ctx, "UserSeeder")`, `r.Run(ctx)` (all, by name), or `r.Add(seed.Seeder{Name: "...", Run: ...})` for ad-hoc ones.
+Each top-level seeder runs in its own transaction, so a failure rolls back that seeder only.
 
-- Each top-level seeder runs in its own transaction (a failure rolls back that seeder).
-- Without `--once` they run every time (like Lucid), so make them idempotent.
-- A seeder with no `Environments` runs everywhere **except production**; list `"production"` to allow it there.
-- The environment comes from `MIGRO_ENV`, then `APP_ENV`, then `development`.
-- `seed.WithoutEvents()` mutes model events while seeding (Laravel's `WithoutModelEvents`).
+From Go:
 
-`migro make:factory User` creates `database/factories/user_factory.go` with a `UserFactory()` function; `migro make:model User -a` creates the model, its migration, factory and seeder together.
+```go
+r := seed.NewRunner(db, seed.Once(), seed.WithEnvironment("staging"))
+if err := r.AddRegistered(); err != nil {
+    return err
+}
+res, err := r.Seed(ctx)             // DatabaseSeeder, or every seeder
+res, err = r.RunOnly(ctx, "UserSeeder")
+res, err = r.Run(ctx)               // every seeder, by name
+r.Add(seed.Seeder{Name: "Demo", Run: func(ctx context.Context, db *migro.DB) error { ... }})
+```
+
+#### Forcing seeders to run in production
+
+In production (`MIGRO_ENV=production`), `db:seed` asks for confirmation in a terminal, and refuses with `PRODUCTION_BLOCKED` when there is none. `--force` runs it without asking. Seeders still have to allow `"production"` in their `Environments`.
+
+```
+migro db:seed --force
+```
